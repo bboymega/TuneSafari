@@ -14,6 +14,7 @@ from pathlib import Path
 from io import BytesIO
 import ffmpeg
 import sys
+import re
 
 config_file = CONFIG_FILE if CONFIG_FILE not in [None, '', 'config.json'] else 'config.json'
 
@@ -45,6 +46,15 @@ def generate_result_token(length=20):
     random_id = ''.join(secrets.choice(characters) for _ in range(length))
     return random_id
 
+def sanitize_filename(filename):
+    # Remove leading/trailing spaces
+    filename = filename.strip()
+    # Replace any special characters with underscores
+    # This pattern covers common special characters that might be unsafe
+    invalid_chars = r'[<>:"/\\|?*`!@#$%^&()&{}[\];+=,\'"]'
+    filename = re.sub(invalid_chars, '_', filename)
+    # Return the sanitized filename
+    return filename
 
 @app.route('/api/recognize', methods=['POST'])
 def recognize_api():
@@ -201,7 +211,7 @@ def fingerprint_api():
 
             # Obtain filename
             file_path_obj = Path(uploaded_filename)
-            song_name = file_path_obj.stem
+            song_name = sanitize_filename(file_path_obj.stem)
 
             # fingerprint song
             status, file_hash = fingerprint(blob, song_name, request.remote_addr)

@@ -13,9 +13,9 @@
         "user": "dejavu",
         "password": "dejavu",
         "database": "dejavu0",
-        "port": 3306
+        "port": 9000
       },
-      "database_type": "mysql"
+      "database_type": "clickhouse"
     },
     {
       "database": {
@@ -23,9 +23,9 @@
         "user": "dejavu",
         "password": "dejavu",
         "database": "dejavu1",
-        "port": 3306
+        "port": 9000
       },
-      "database_type": "mysql"
+      "database_type": "clickhouse"
     },
     {
       "database": {
@@ -33,9 +33,9 @@
         "user": "dejavu",
         "password": "dejavu",
         "database": "dejavu2",
-        "port": 3306
+        "port": 9000
       },
-      "database_type": "mysql"
+      "database_type": "clickhouse"
     }
   ],
   "results": [
@@ -45,9 +45,9 @@
         "user": "dejavu",
         "password": "dejavu",
         "database": "result0",
-        "port": 3306
+        "port": 9000
       },
-      "database_type": "mysql"
+      "database_type": "clickhouse"
     },
     {
       "database": {
@@ -55,9 +55,9 @@
         "user": "dejavu",
         "password": "dejavu",
         "database": "result1",
-        "port": 3306
+        "port": 9000
       },
-      "database_type": "mysql"
+      "database_type": "clickhouse"
     },
     {
       "database": {
@@ -65,9 +65,9 @@
         "user": "dejavu",
         "password": "dejavu",
         "database": "result2",
-        "port": 3306
+        "port": 9000
       },
-      "database_type": "mysql"
+      "database_type": "clickhouse"
     }
   ]
 }
