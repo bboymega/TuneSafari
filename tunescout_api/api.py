@@ -15,10 +15,12 @@ from io import BytesIO
 import ffmpeg
 import sys
 import re
+from flask_cors import CORS
 
 config_file = CONFIG_FILE if CONFIG_FILE not in [None, '', 'config.json'] else 'config.json'
 
 app = Flask("tunescout_api")
+CORS(app)
 
 def init():
     try:
