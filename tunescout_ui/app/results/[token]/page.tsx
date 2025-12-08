@@ -213,7 +213,7 @@ export default function ResultPage() {
 
         })
         .catch(error => {
-            const errorAlert = createErrorAlert(error + '. <strong>Redirecting...</strong>');
+            const errorAlert = createErrorAlert('Error: Backend not reachable. <strong>Redirecting...</strong>');
             document.getElementById("mainDiv").appendChild(errorAlert);
             setTimeout(() => router.push('/'), 3500);
         });
