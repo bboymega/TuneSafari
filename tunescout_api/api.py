@@ -77,9 +77,9 @@ def recognize_api():
                 recognizing_config = json_config["recognizing"]
                 if "max_duration" in recognizing_config:
                     if isinstance(recognizing_config["max_duration"], str):
-                        max_duration = int(recognizing_config["max_duration"]) * 1000
+                        max_duration = int(recognizing_config["max_duration"])
                     else:
-                        max_duration = recognizing_config["max_duration"] * 1000
+                        max_duration = recognizing_config["max_duration"]
                     if max_duration > 0:
                         try:
                             blob = ffmpeg.input('pipe:0', t=max_duration) \

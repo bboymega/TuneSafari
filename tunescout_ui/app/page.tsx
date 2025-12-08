@@ -17,19 +17,53 @@ function FileSelector () {
     if (selectedFile) {
       setFileName(selectedFile.name)
     }
+    else {
+      setFileName(null)
+    }
   };
 
+  function createErrorAlert(message) {
+    if (document.getElementById('errorAlert')) {
+      document.getElementById('errorAlert').remove();
+    }
+    const errorAlert = document.createElement('div');
+    errorAlert.className = 'alert alert-danger';
+    errorAlert.id = 'errorAlert'
+    errorAlert.role = 'alert';
+    errorAlert.style = "position:absolute; z-index:9999; transition:opacity 0.5s ease; opacity:1;";
+    errorAlert.innerHTML = message;
+    setTimeout(() => {
+      errorAlert.style.opacity = "0";
+      setTimeout(() => errorAlert.remove(), 500);
+    }, 2000);
+    return errorAlert;
+  }
+
   const handleRecognizeFile = async () => {
-    try {
-      const formData = new FormData();
-      formData.append('file', document.getElementById('fileInput').files[0]);
-      const url = 'http://172.16.241.129:8080/api/recognize';
-      const response = await uploadtoAPI(url, formData);
-      console.log(response)
+    if (! document.getElementById('fileInput').files[0])
+    {
+      const errorAlert = createErrorAlert('Error: No file selected');
+      document.getElementById("mainDiv").appendChild(errorAlert);
     }
-    catch (error) {
-      console.error('Error during file upload:', error);
-    }
+    else {
+      try {
+        document.getElementById('recordBtn').disabled = true;
+        document.getElementById('uploadBtn').disabled = true;
+        document.getElementById('selectFileBtn').disabled = true;
+        const formData = new FormData();
+        formData.append('file', document.getElementById('fileInput').files[0]);
+        const url = 'http://172.16.241.129:8080/api/recognize';
+        const response = await uploadtoAPI(url, formData);
+        console.log(response)
+      }
+      catch (error) {
+        const errorAlert = createErrorAlert(error);
+        document.getElementById("mainDiv").appendChild(errorAlert);
+        document.getElementById('recordBtn').disabled = false;
+        document.getElementById('uploadBtn').disabled = false;
+        document.getElementById('selectFileBtn').disabled = false;
+      }
+    };
   };
 
   function deleteUploadProgress() {
@@ -46,7 +80,11 @@ function FileSelector () {
 
       const spinner = document.createElement('div');
       spinner.id = 'spinner';
-      spinner.className = 'spinner-border';
+      spinner.className = 'mx-auto mb-2'
+      spinner.style.width = '180px';
+      spinner.style.height = '150px';
+      spinner.style.backgroundImage = "url('assets/img/loading.gif')";
+      spinner.style.backgroundSize = 'cover';
 
       const text = document.createElement('div');
       text.id = 'uploadProgressText';
@@ -57,7 +95,7 @@ function FileSelector () {
       uploadProgress.style.position = 'fixed'; 
       uploadProgress.style.top = '50%';
       uploadProgress.style.fontFamily = '"OPTICopperplate-Light", sans-serif';
-      uploadProgress.className = "mx-auto mt-2 mb-8 text-center";
+      uploadProgress.className = 'mx-auto mt-2 mb-8 text-center';
       uploadProgress.style.transform = 'translateY(-50%)'; // Adjust for exact middle positioning
       uploadProgress.style.backgroundColor = 'rgba(0, 0, 0, 0.5)'; // 50% transparency (black background)
       uploadProgress.style.color = '#fff';      // White text
@@ -72,10 +110,24 @@ function FileSelector () {
       xhr.onload = function () {
         if (xhr.status === 200) {
           resolve(xhr.responseText); // Resolve with the response text
+          const jsonData = JSON.parse(xhr.responseText);
           deleteUploadProgress();
+          document.getElementById('recordBtn').disabled = false;
+          document.getElementById('uploadBtn').disabled = false;
+          document.getElementById('selectFileBtn').disabled = false;
         } else {
-          reject(new Error(`Failed to upload file: ${xhr.statusText}`));
+          const jsonData = JSON.parse(xhr.responseText);
+          const errorMessage =
+            jsonData.error ??   // highest priority
+            jsonData.status ??  // fallback
+            null;           // nothing found
+          reject(new Error(`${xhr.status} ${errorMessage}`));
           deleteUploadProgress();
+          document.getElementById('recordBtn').disabled = false;
+          document.getElementById('uploadBtn').disabled = false;
+          document.getElementById('selectFileBtn').disabled = false;
+          const errorAlert = createErrorAlert(`${xhr.status} ${errorMessage}`);
+          document.getElementById("mainDiv").appendChild(errorAlert);
         }
       };
       xhr.upload.onload = function () {
@@ -91,8 +143,13 @@ function FileSelector () {
         };
       };
       xhr.onerror = function () {
-        reject(new Error('API not reachable'));
+        reject(new Error('Backend not reachable'));
         deleteUploadProgress();
+        document.getElementById('recordBtn').disabled = false;
+        document.getElementById('uploadBtn').disabled = false;
+        document.getElementById('selectFileBtn').disabled = false;
+        const errorAlert = createErrorAlert('Backend not reachable');
+        document.getElementById("mainDiv").appendChild(errorAlert);
       };
       xhr.send(formData);
     })
@@ -152,7 +209,7 @@ export default function Index() {
               <div className="container px-4 px-lg-5 d-flex h-100 align-items-center justify-content-center">
                   <div className="d-flex justify-content-center" id="mainDiv">
                       <div className="text-center" id="panel">
-                          <h1 className="mx-auto my-0 mt-2 mb-5 text-uppercase">Audio<br/>Analyze</h1>
+                          <h1 className="mx-auto my-0 mt-2 mb-5 text-uppercase">TuneScout</h1>
                           <h2 className="mx-auto mt-2 mb-4">Record an audio</h2>
                           <button id="recordBtn" className="mx-auto btn btn-primary mt-2 mb-5" style={{"backgroundColor": "red"}}>Record <i className="fas fa-microphone"></i></button>
                           <h2 className="mx-auto mt-2 mb-4">or upload a file</h2>
@@ -161,7 +218,7 @@ export default function Index() {
                   </div>
               </div>
           </header>
-          <footer className="footer bg-black small text-center text-white-50"><div className="container px-4 px-lg-5">Copyright &copy; Your Website 2023</div></footer>
+          <footer className="footer bg-black small text-center text-white-50"><div className="container px-4 px-lg-5">Copyright &copy; TuneScout 2025</div></footer>
     </div>
   );
 }
