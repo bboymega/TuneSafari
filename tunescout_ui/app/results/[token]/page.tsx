@@ -35,7 +35,7 @@ export default function ResultPage() {
                 setIsResultsFetched(true);
             })
             .catch(error => {
-                setErrorMsg('Error: Backend not reachable. <strong>Redirecting...</strong>');
+                setErrorMsg('Error: Backend not reachable. Redirecting...');
                 setisError(true);
                 setTimeout(() => router.push('/'), 3500);
             });
