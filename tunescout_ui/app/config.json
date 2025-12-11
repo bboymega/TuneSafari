@@ -1,0 +1,4 @@
+{
+    "max_duration": 10,
+    "api_base_url": "http://172.16.241.129:8080/"
+}

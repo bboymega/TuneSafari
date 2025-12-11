@@ -54,6 +54,8 @@ def recognize_all(blob):
     # collect results from each instance and merge them
     while not result_queue.empty():
         result = result_queue.get()
+        if len(result['results']) <= 0:
+            continue
         dup = False
         # De-duplication of results
         for item in songs:

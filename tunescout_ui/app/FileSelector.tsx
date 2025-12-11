@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { useRouter } from 'next/navigation';
+import config from './config.json';
 
-export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setisError }) {
+export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [fileName, setFileName] = useState<string | null>(null); // State to store filename
   const [selectedFile, setSelectedFile] = useState(null);
@@ -26,7 +27,8 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
   const handleRecognizeFile = async () => {
     if (!selectedFile)
     {
-      setisError(true);
+      setIsError(true);
+      setIsWarning(false);
       setErrorMsg('Error: No file selected');
     }
     else {
@@ -34,7 +36,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         setDisabled(true);
         const formData = new FormData();
         formData.append('file', selectedFile);
-        const url = 'http://172.16.241.129:8080/api/recognize';
+        const url = `${config.api_base_url.replace(/\/$/, '')}/api/recognize`;
         const response = await uploadtoAPI(url, formData);
         if (response) {
           const resultToken = JSON.parse(response).token;
@@ -42,13 +44,16 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
             router.push(`/results/${resultToken}`);
           }
           else {
-            setisError(true);
-            setErrorMsg('Error: No results were found');
+            setIsError(false);
+            setIsWarning(true);
+            setWarnMsg('Warning: No results were found');
           }
         }
       }
       catch (error) {
-        setisError(true);
+        setTitle('TuneScout - Find the tracks that sticks');
+        setIsError(true);
+        setIsWarning(false);
         setErrorMsg(error.toString());
       }
       finally {

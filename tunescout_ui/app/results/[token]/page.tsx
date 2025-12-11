@@ -3,6 +3,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, useRef } from "react";
 import ErrorAlert from '@/app/ErrorAlert';
 import ResultsModule from './ResultsModule';
+import config from '@/app/config.json';
 
 export default function ResultPage() {
     const fetchCalled = useRef(false);
@@ -11,12 +12,12 @@ export default function ResultPage() {
     const router = useRouter();
     const [title, setTitle] = useState('TuneScout - Loading Results...');
     const [errorMsg, setErrorMsg] = useState("");
-    const [isError, setisError] = useState(false);
+    const [isError, setIsError] = useState(false);
     const [resultsJson, setResultsJson] = useState("");
     const [isResultsFetched, setIsResultsFetched] = useState(false);
 
     const handleResultFetch = async () => {
-        const url = `http://172.16.241.129:8080/api/fetch/${token}`;
+        const url = `${config.api_base_url.replace(/\/$/, '')}/api/fetch/${token}`;
         await fetch(url)
             .then(response => 
                 response.json().then(jsonData => {
@@ -36,7 +37,7 @@ export default function ResultPage() {
             })
             .catch(error => {
                 setErrorMsg('Error: Backend not reachable. Redirecting...');
-                setisError(true);
+                setIsError(true);
                 setTimeout(() => router.push('/'), 3500);
             });
     };
@@ -63,7 +64,7 @@ export default function ResultPage() {
                         {isError && (
                             <ErrorAlert
                                 message={errorMsg}
-                                onClose={() => setisError(false)}
+                                onClose={() => setIsError(false)}
                             />
                         )}
                         {isResultsFetched && (

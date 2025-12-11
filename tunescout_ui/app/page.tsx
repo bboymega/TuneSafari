@@ -3,13 +3,16 @@ import { useState, useEffect } from "react";
 import AudioRecorder from "./AudioRecorder";
 import FileSelector from './FileSelector';
 import ErrorAlert from './ErrorAlert';
+import WarningAlert from "./WarningAlert";
 import UploadProgress from "./UploadProgress";
 
 export default function index() {
   const [title, setTitle] = useState('TuneScout - Find the tracks that sticks');
   const [disabled, setDisabled] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [isError, setisError] = useState(false);
+  const [isError, setIsError] = useState(false);
+  const [warnMsg, setWarnMsg] = useState("");
+  const [isWarning, setIsWarning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadState, setUploadState] = useState("Uploading...");
     
@@ -23,6 +26,7 @@ export default function index() {
     xhr.onload = function () {
       if (xhr.status === 200) {
         resolve(xhr.responseText); // Resolve with the response text
+        setUploadState('Uploading...');
         setIsUploading(false);
         setDisabled(false);
         return xhr.responseText;
@@ -33,16 +37,17 @@ export default function index() {
           jsonData.status ??  // fallback
           null;           // nothing found
         reject(new Error(`${xhr.status} ${errorMessage}`));
+        setUploadState('Uploading...');
         setIsUploading(false);
         setDisabled(false);
         setErrorMsg(`${xhr.status} ${errorMessage}`);
-        setisError(true);
+        setIsError(true);
         return null;
       }
     };
     xhr.upload.onload = function () {
-      setUploadState('Recognizing...')
       setTitle('TuneScout - Recognizing...');
+      setUploadState('Recognizing...')
     };
     xhr.upload.onprogress = function (event) {
       if (event.lengthComputable) {
@@ -57,7 +62,8 @@ export default function index() {
       reject(new Error('Backend not reachable'));
       setIsUploading(false);
       setDisabled(false);
-      setisError(true)
+      setTitle('TuneScout - Find the tracks that sticks');
+      setIsError(true)
       setErrorMsg('Error: Backend not reachable');
     };
     xhr.send(formData);
@@ -70,6 +76,7 @@ useEffect(() => {
       }
   }, [title]);
 
+
 return (
   <>
     <div id="main">
@@ -79,7 +86,13 @@ return (
             {isError && (
               <ErrorAlert
                 message={errorMsg}
-                onClose={() => setisError(false)}
+                onClose={() => setIsError(false)}
+              />
+            )}
+            {isWarning && (
+              <WarningAlert
+                message={warnMsg}
+                onClose={() => setIsWarning(false)}
               />
             )}
             {isUploading && (
@@ -95,7 +108,10 @@ return (
                 uploadtoAPI={uploadtoAPI}
                 setDisabled={setDisabled}
                 setErrorMsg={setErrorMsg}
-                setisError={setisError}
+                setIsError={setIsError}
+                setWarnMsg={setWarnMsg}
+                setIsWarning={setIsWarning}
+                setTitle={setTitle}
               />
               <h2 className="mx-auto mt-2 mb-4">or upload a file</h2>
               <FileSelector
@@ -103,7 +119,10 @@ return (
                 uploadtoAPI={uploadtoAPI}
                 setDisabled={setDisabled}
                 setErrorMsg={setErrorMsg}
-                setisError={setisError}
+                setIsError={setIsError}
+                setWarnMsg={setWarnMsg}
+                setIsWarning={setIsWarning}
+                setTitle={setTitle}
                 />
             </div>
           </div>

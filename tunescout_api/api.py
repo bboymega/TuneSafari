@@ -16,6 +16,7 @@ import ffmpeg
 import sys
 import re
 from flask_cors import CORS
+import traceback
 
 config_file = CONFIG_FILE if CONFIG_FILE not in [None, '', 'config.json'] else 'config.json'
 
@@ -127,6 +128,7 @@ def recognize_api():
             print(f"{request.remote_addr} - - {datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} \"INFO: Recognition result generated, token: {results_token}\" -")
             return(jsonify({"token":results_token, "results": results_array, "status": "Success"}))
         elif result_status == 1:
+            sys.stderr.write("\033[93m" + f"{request.remote_addr} - - {datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} \"WARNING: No results were found\" -" + "\033[0m\n")
             return jsonify({
                 "results": []
             }), 200
@@ -136,6 +138,10 @@ def recognize_api():
                 "error": "Falied to store result"
             }), 500
     except Exception as e:
+        traceback_info = traceback.format_exc()
+        sys.stderr.write("\033[31m" + "\n--- Full Traceback ---" + "\033[0m\n")
+        sys.stderr.write("\033[31m" + traceback_info + "\033[0m\n")
+        sys.stderr.write("\033[31m----------------------\033[0m\n")
         sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
         abort(500)
 
@@ -152,6 +158,11 @@ def fetch_result_api(token):
                 "error": "The requested data could not be found"
             }), 404
     except Exception as e:
+        traceback_info = traceback.format_exc()
+        sys.stderr.write("\033[31m" + "\n--- Full Traceback ---" + "\033[0m\n")
+        sys.stderr.write("\033[31m" + traceback_info + "\033[0m\n")
+        sys.stderr.write("\033[31m----------------------\033[0m\n")
+        sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
         sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
         abort(500)
 
@@ -238,6 +249,11 @@ def fingerprint_api():
                 sys.stderr.write("\033[31m" + f"{request.remote_addr} - - {datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')} \"ERROR: Internal server error\" -" + "\033[0m\n")
                 abort(500)
     except Exception as e:
+        traceback_info = traceback.format_exc()
+        sys.stderr.write("\033[31m" + "\n--- Full Traceback ---" + "\033[0m\n")
+        sys.stderr.write("\033[31m" + traceback_info + "\033[0m\n")
+        sys.stderr.write("\033[31m----------------------\033[0m\n")
+        sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
         sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
         abort(500)
 
