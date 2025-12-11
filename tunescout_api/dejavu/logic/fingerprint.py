@@ -1,7 +1,7 @@
 import hashlib
 from operator import itemgetter
 from typing import List, Tuple
-import multiprocessing as mp
+
 import matplotlib.mlab as mlab
 import matplotlib.pyplot as plt
 import numpy as np
@@ -118,30 +118,6 @@ def get_2D_peaks(arr2D: np.array, plot: bool = False, amp_min: int = DEFAULT_AMP
 
     return list(zip(freqs_filter, times_filter))
 
-# Multi processing Wrapper
-def _peak_finding_wrapper(args):
-    """Wrapper to unpack the tuple of arguments for peak_finding."""
-    # args is the tuple (i, idx_freq, idx_time, fan_value, peaks)
-    return peak_finding(*args)
-
-# Subprocess
-def peak_finding(i, idx_freq, idx_time, fan_value, peaks):
-    local_hashes = []
-    for j in range(1, fan_value):
-        if (i + j) < len(peaks):
-
-            freq1 = peaks[i][idx_freq]
-            freq2 = peaks[i + j][idx_freq]
-            t1 = peaks[i][idx_time]
-            t2 = peaks[i + j][idx_time]
-            t_delta = t2 - t1
-
-            if MIN_HASH_TIME_DELTA <= t_delta <= MAX_HASH_TIME_DELTA:
-                h = hashlib.sha1(f"{str(freq1)}|{str(freq2)}|{str(t_delta)}".encode('utf-8'))
-
-                local_hashes.append((h.hexdigest()[0:FINGERPRINT_REDUCTION], t1))
-
-    return local_hashes
 
 def generate_hashes(peaks: List[Tuple[int, int]], fan_value: int = DEFAULT_FAN_VALUE) -> List[Tuple[str, int]]:
     """
@@ -161,23 +137,21 @@ def generate_hashes(peaks: List[Tuple[int, int]], fan_value: int = DEFAULT_FAN_V
     if PEAK_SORT:
         peaks.sort(key=itemgetter(1))
 
-    args_list = [
-        (i, idx_freq, idx_time, fan_value, peaks)
-        for i in range(len(peaks))
-    ]
-
     hashes = []
-    # Setup multi processing
-    num_workers = mp.cpu_count()
-    chunksize = max(1, len(peaks) // (num_workers * 10))
+    for i in range(len(peaks)):
+        for j in range(1, fan_value):
+            if (i + j) < len(peaks):
 
-    with mp.Pool(processes=num_workers) as pool:
-        results_iterator = pool.imap_unordered(
-            _peak_finding_wrapper, # Use the wrapper function
-            args_list, 
-            chunksize=chunksize
-        )
-        for local_hashes_list in results_iterator:
-            hashes.extend(local_hashes_list)
-        
+                freq1 = peaks[i][idx_freq]
+                freq2 = peaks[i + j][idx_freq]
+                t1 = peaks[i][idx_time]
+                t2 = peaks[i + j][idx_time]
+                t_delta = t2 - t1
+
+                if MIN_HASH_TIME_DELTA <= t_delta <= MAX_HASH_TIME_DELTA:
+                    h = hashlib.sha1(f"{str(freq1)}|{str(freq2)}|{str(t_delta)}".encode('utf-8'))
+
+                    hashes.append((h.hexdigest()[0:FINGERPRINT_REDUCTION], t1))
+
     return hashes
+    
