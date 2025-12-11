@@ -20,8 +20,16 @@ import traceback
 
 config_file = CONFIG_FILE if CONFIG_FILE not in [None, '', 'config.json'] else 'config.json'
 
-app = Flask("tunescout_api")
-CORS(app)
+def create_app():
+    app = Flask("tunescout_api")
+    with open(config_file, "r") as f:
+        config = json.load(f)
+        if(config.get("allowed_origin")):
+            allowed_origin = config.get("allowed_origin")
+            CORS(app, resources={r"/*": {"origins": allowed_origin}})
+    return app
+
+app = create_app()
 
 def init():
     try:
