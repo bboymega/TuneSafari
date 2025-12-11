@@ -118,6 +118,13 @@ def get_2D_peaks(arr2D: np.array, plot: bool = False, amp_min: int = DEFAULT_AMP
 
     return list(zip(freqs_filter, times_filter))
 
+# Multi processing Wrapper
+def _peak_finding_wrapper(args):
+    """Wrapper to unpack the tuple of arguments for peak_finding."""
+    # args is the tuple (i, idx_freq, idx_time, fan_value, peaks)
+    return peak_finding(*args)
+
+# Subprocess
 def peak_finding(i, idx_freq, idx_time, fan_value, peaks):
     local_hashes = []
     for j in range(1, fan_value):
@@ -160,9 +167,17 @@ def generate_hashes(peaks: List[Tuple[int, int]], fan_value: int = DEFAULT_FAN_V
     ]
 
     hashes = []
-    with mp.Pool(processes=mp.cpu_count()) as pool:
-        results = pool.starmap(peak_finding, args_list)
+    # Setup multi processing
+    num_workers = mp.cpu_count()
+    chunksize = max(1, len(peaks) // (num_workers * 10))
 
-    hashes = [h for sublist in results for h in sublist]
+    with mp.Pool(processes=num_workers) as pool:
+        results_iterator = pool.imap_unordered(
+            _peak_finding_wrapper, # Use the wrapper function
+            args_list, 
+            chunksize=chunksize
+        )
+        for local_hashes_list in results_iterator:
+            hashes.extend(local_hashes_list)
         
     return hashes
