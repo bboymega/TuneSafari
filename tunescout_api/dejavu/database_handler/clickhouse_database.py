@@ -4,6 +4,8 @@ import sys
 from clickhouse_driver import Client
 from typing import Dict, List, Tuple
 from dejavu.base_classes.base_database import BaseDatabase
+import numpy as np
+import traceback
 from dejavu.config.settings import (FIELD_BLOB_SHA1, FIELD_FINGERPRINTED,
                                     FIELD_HASH, FIELD_OFFSET, FIELD_SONG_ID,
                                     FIELD_SONGNAME, FIELD_TOTAL_HASHES,
@@ -36,6 +38,10 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
             self.client.execute(self.CREATE_FINGERPRINTS_TABLE)
             self.client.execute(self.DELETE_UNFINGERPRINTED)
         except Exception as e:
+            traceback_info = traceback.format_exc()
+            sys.stderr.write("\033[31m" + "\n--- Full Traceback ---" + "\033[0m\n")
+            sys.stderr.write("\033[31m" + traceback_info + "\033[0m\n")
+            sys.stderr.write("\033[31m----------------------\033[0m\n")
             sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
     
     def empty(self) -> None:
@@ -48,6 +54,10 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
 
             self.setup()
         except Exception as e:
+            traceback_info = traceback.format_exc()
+            sys.stderr.write("\033[31m" + "\n--- Full Traceback ---" + "\033[0m\n")
+            sys.stderr.write("\033[31m" + traceback_info + "\033[0m\n")
+            sys.stderr.write("\033[31m----------------------\033[0m\n")
             sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
 
     def delete_unfingerprinted_songs(self) -> None:
@@ -211,37 +221,27 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
     
     def return_matches(self, hashes: List[Tuple[str, int]], batch_size: int = 1000) -> Tuple[List[Tuple[int, int]], Dict[int, int]]:
         """
-        Searches the database for pairs of (hash, offset) values.
-
-        :param hashes: A sequence of tuples in the format (hash, offset)
-            - hash: Part of a sha1 hash, in hexadecimal format
-            - offset: Offset this hash was created from/at.
-        :param batch_size: number of query's batches.
-        :return: a list of (sid, offset_difference) tuples and a
-        dictionary with the amount of hashes matched (not considering
-        duplicated hashes) in each song.
-            - song id: Song identifier
-            - offset_difference: (database_offset - sampled_offset)
+        Searches the database for pairs of (hash, offset) values, refactored with NumPy.
         """
-        # Create a dictionary of hash => offset pairs for later lookups
+        # Prepare Data for Query
         mapper = {}
         for hsh, offset in hashes:
-            if hsh in mapper:
-                mapper[hsh].append(offset)
-            else:
-                mapper[hsh] = [offset]
+            # We convert offsets to NumPy arrays immediately for later vectorization
+            if hsh not in mapper:
+                mapper[hsh] = []
+            mapper[hsh].append(offset)
+        
+        # Convert lists of offsets into NumPy arrays *once*
+        for hsh in mapper:
+             mapper[hsh] = np.array(mapper[hsh], dtype=np.int64)
 
         values = list(mapper.keys())  # All the unique hashes
 
-        # Dictionary to store the number of matched hashes per song
-        dedup_hashes = {}
+        dedup_hashes: Dict[int, int] = {}
+        results: List[Tuple[int, int]] = [] # Still a Python list, efficient for many appends
 
-        # List to store the results (sid, offset_difference)
-        results = []
-
-        # Process the values in batches
+        # Batch Query and Vectorized Processing
         for index in range(0, len(values), batch_size):
-            # Get the current batch of hashes to query
             current_batch = values[index: index + batch_size]
 
             SELECT_MULTIPLE = f"""
@@ -249,22 +249,38 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
                     `{FIELD_SONG_ID}`,
                     `{FIELD_OFFSET}`
                 FROM `{FINGERPRINTS_TABLENAME}`
-                WHERE `{FIELD_HASH}` IN ({', '.join([repr(hash_value.lower()) for hash_value in values[index: index + batch_size]])});
+                WHERE `{FIELD_HASH}` IN ({', '.join([repr(hash_value.lower()) for hash_value in current_batch])});
             """
 
             result = self.client.execute(SELECT_MULTIPLE)
+            
+            # The database result is a list of (hsh, sid, offset) tuples.
+            # We convert it into separate, aligned NumPy arrays for fast processing.
+            if not result:
+                continue
 
-            # Process the results
-            for hsh, sid, offset in result:
-                # Count the number of times each song is matched
-                if sid not in dedup_hashes:
-                    dedup_hashes[sid] = 1
-                else:
-                    dedup_hashes[sid] += 1
-                
-                # Calculate the offset difference for each sampled offset
-                for song_sampled_offset in mapper[hsh]:
-                    results.append((sid, offset - song_sampled_offset))
+            # Separate columns into arrays
+            db_hashes = np.array([row[0] for row in result])
+            db_sids = np.array([row[1] for row in result], dtype=object)
+            db_offsets = np.array([row[2] for row in result], dtype=np.int64)
+
+            unique_hashes = np.unique(db_hashes)
+            
+            for hsh in unique_hashes:
+                match_indices = np.where(db_hashes == hsh)[0]
+                sampled_offsets = mapper[hsh] # np.array of sampled offsets
+
+                for i in match_indices:
+                    sid = db_sids[i]
+                    db_offset = db_offsets[i]
+                    offset_differences = db_offset - sampled_offsets 
+                    
+                    sid_array = np.full_like(offset_differences, sid, dtype=object)
+                    temp_results = np.column_stack((sid_array, offset_differences))
+                    
+                    results.extend(map(tuple, temp_results))
+
+                    dedup_hashes[sid] = dedup_hashes.get(sid, 0) + 1 # This counts duplicates based on sid and hash match (if a hash appears twice in the db for the same song, it's counted twice in the original). Assuming this is the desired behavior.
 
         return results, dedup_hashes
     
@@ -417,7 +433,11 @@ class ClickhouseDatabase(Query):
             if result:
                 return result[0][0]  # Assuming the result is a list of tuples and the first element is the song_id
         except Exception as e:
-                sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
+            traceback_info = traceback.format_exc()
+            sys.stderr.write("\033[31m" + "\n--- Full Traceback ---" + "\033[0m\n")
+            sys.stderr.write("\033[31m" + traceback_info + "\033[0m\n")
+            sys.stderr.write("\033[31m----------------------\033[0m\n")
+            sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
         
     def __getstate__(self):
         return self._options,
