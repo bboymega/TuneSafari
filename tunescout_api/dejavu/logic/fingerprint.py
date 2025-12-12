@@ -120,36 +120,36 @@ def get_2D_peaks(arr2D: np.array, plot: bool = False, amp_min: int = DEFAULT_AMP
     
 
 def generate_hashes(peaks, fan_value=DEFAULT_FAN_VALUE):
-    """
-    Use Numpy arrays for better performance.
-    """
+    # 1. Preserve old behavior: optional sort
+    if PEAK_SORT:
+        peaks = sorted(peaks, key=lambda x: x[1])
+
     peaks = np.asarray(peaks)
-    freqs = peaks[:, 0]
-    times = peaks[:, 1]
+    freqs = peaks[:, 0].astype(int)
+    times = peaks[:, 1].astype(int)
 
     n = len(peaks)
 
-    # Build the i and j matrices
-    # i: shape (n, fan_value-1)
-    i_idx = np.repeat(np.arange(n).reshape(n, 1), fan_value - 1, axis=1)
+    # Build index matrices exactly matching the Python loop order
+    i_idx = np.arange(n).reshape(n, 1)
+    i_idx = np.repeat(i_idx, fan_value - 1, axis=1)
 
-    # j: shape (n, fan_value-1)
     j_offsets = np.arange(1, fan_value)
-    j_idx = i_idx + j_offsets  # broadcasting works
+    j_idx = i_idx + j_offsets
 
-    # mask for valid j within bounds
-    valid = j_idx < n  # shape (n, fan_value-1)
+    # mask for valid j < n
+    valid = j_idx < n
 
-    # Flatten everything where valid=True
-    i_valid = i_idx[valid]     # shape (num_valid_pairs,)
+    # Flatten valid pairs in row-major order (matches nested loops)
+    i_valid = i_idx[valid]
     j_valid = j_idx[valid]
 
-    # compute deltas (now all are 1D arrays)
+    # Compute deltas
     t1 = times[i_valid]
     t2 = times[j_valid]
     t_delta = t2 - t1
 
-    # Filter by delta
+    # Apply delta constraints
     mask = (t_delta >= MIN_HASH_TIME_DELTA) & (t_delta <= MAX_HASH_TIME_DELTA)
 
     i_final = i_valid[mask]
@@ -157,10 +157,13 @@ def generate_hashes(peaks, fan_value=DEFAULT_FAN_VALUE):
     t1_final = t1[mask]
     t_delta_final = t_delta[mask]
 
-    # Now hash only the remaining pairs
+    # Produce hashes in exact original order
     hashes = []
     for i, j, t1_val, dt_val in zip(i_final, j_final, t1_final, t_delta_final):
-        h = hashlib.sha1(f"{freqs[i]}|{freqs[j]}|{dt_val}".encode("utf-8"))
+        freq1 = int(freqs[i])
+        freq2 = int(freqs[j])
+        h = hashlib.sha1(f"{freq1}|{freq2}|{dt_val}".encode("utf-8"))
         hashes.append((h.hexdigest()[:FINGERPRINT_REDUCTION], int(t1_val)))
 
     return hashes
+

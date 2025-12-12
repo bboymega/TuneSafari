@@ -46,6 +46,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
           else {
             setIsError(false);
             setIsWarning(true);
+            setTitle('TuneScout - Find the tracks that sticks');
             setWarnMsg('Warning: No results were found');
           }
         }
