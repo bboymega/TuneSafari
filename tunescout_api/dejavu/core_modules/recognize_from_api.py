@@ -6,6 +6,7 @@ import multiprocessing as mp
 from dejavu import Dejavu
 from dejavu.logic.recognizer.blob_recognizer import BlobRecognizer
 from dejavu.config.settings import (CONFIG_FILE, FIELD_BLOB_SHA1)
+import traceback
 
 config_file = CONFIG_FILE if CONFIG_FILE not in [None, '', 'config.json'] else 'config.json'
 
@@ -32,6 +33,10 @@ def recognize(blob, instance, result_queue):
         result = instance.recognize(BlobRecognizer, blob)
         result_queue.put(result)
     except Exception as e:
+        traceback_info = traceback.format_exc()
+        sys.stderr.write("\033[31m" + "\n--- Full Traceback ---" + "\033[0m\n")
+        sys.stderr.write("\033[31m" + traceback_info + "\033[0m\n")
+        sys.stderr.write("\033[31m----------------------\033[0m\n")
         sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
         return
 
