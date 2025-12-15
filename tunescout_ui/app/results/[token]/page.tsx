@@ -10,34 +10,84 @@ export default function ResultPage() {
     const params = useParams();       // useParams returns { token: string }
     const token = params.token;
     const router = useRouter();
-    const [title, setTitle] = useState('TuneScout - Loading Results...');
+    const [title, setTitle] = useState(`${config.appName} - Loading Results...`);
     const [errorMsg, setErrorMsg] = useState("");
     const [isError, setIsError] = useState(false);
     const [resultsJson, setResultsJson] = useState("");
     const [isResultsFetched, setIsResultsFetched] = useState(false);
+    const currentYear = new Date().getFullYear();
+    const [progress, setProgress] = useState(20);
+    const [showProgress, setShowProgress] = useState(false);
+
+    function ProgressBar() {
+        return (
+        <div
+            className="progress"
+            style=
+                {{ height: '1.5px',
+                backgroundColor: 'transparent',
+                border: 'none',
+                overflow: 'hidden',
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100%',
+                zIndex: 99999
+            }}
+            >
+            <div
+                className="progress-bar"
+                role="progressbar"
+                style=
+                    {{ width: `${progress}%`,
+                    backgroundColor: '#f8f9fa',
+                    transition: 'width 0.4s ease'
+                }}
+                aria-valuenow={progress}
+                aria-valuemin="0"
+                aria-valuemax="100"
+            >
+            </div>
+        </div>
+        )
+    }
 
     const handleResultFetch = async () => {
         const url = `${config.apiBaseUrl.replace(/\/$/, '')}/api/fetch/${token}`;
+        setShowProgress(true);
+        setProgress(66);
         await fetch(url)
             .then(response => 
                 response.json().then(jsonData => {
+                    setProgress(85);
                     const errorMessage =
                         jsonData.error ??
                         jsonData.status ??
                         null;
                     if (!response.ok) {
+                        setProgress(100);
+                        setShowProgress(false);
                         return Promise.reject(new Error(`${response.status} ${errorMessage}`));
                     }
                     return jsonData;
                 })
             )
             .then(jsonData => {
+                setProgress(95);
                 setResultsJson(jsonData);
                 setIsResultsFetched(true);
+                setProgress(100);
+                setTimeout(() => setShowProgress(false), 500);
             })
             .catch(error => {
-                setErrorMsg('Error: Backend not reachable. Redirecting...');
+                if (error instanceof TypeError) {
+                    setErrorMsg('Error: Backend not available');
+                } else {
+                    setErrorMsg(`${error}`);
+                }
                 setIsError(true);
+                setProgress(100);
+                setShowProgress(false);
                 setTimeout(() => router.push('/'), 3500);
             });
     };
@@ -58,6 +108,9 @@ export default function ResultPage() {
     return (
     <>
         <div id="main">
+            {showProgress &&
+            <ProgressBar/>
+            }
             <div className="masthead">
                 <div className="container px-4 px-lg-5 d-flex h-100 align-items-center justify-content-center">
                     <div className="d-flex justify-content-center" id="mainDiv">
@@ -70,12 +123,14 @@ export default function ResultPage() {
                         {isResultsFetched && (
                             <ResultsModule
                                 resultsJson={resultsJson}
+                                setProgress={setProgress}
+                                setShowProgress={setShowProgress}
                             />
                         )}
                     </div>
                 </div>
             </div>
-            <footer className="footer bg-black small text-center text-white-50"><div className="container px-4 px-lg-5">Copyright &copy; TuneScout 2025</div></footer>
+            <footer className="footer bg-black small text-center text-white-50"><div className="container px-4 px-lg-5">Copyright &copy; {config.appName} {currentYear}</div></footer>
         </div>
     </>
   );

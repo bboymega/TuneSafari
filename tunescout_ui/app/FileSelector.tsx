@@ -46,13 +46,13 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
           else {
             setIsError(false);
             setIsWarning(true);
-            setTitle('TuneScout - Find the tracks that sticks');
+            setTitle(`${config.appName} - ${config.title}`);
             setWarnMsg('Warning: No results were found');
           }
         }
       }
       catch (error) {
-        setTitle('TuneScout - Find the tracks that sticks');
+        setTitle(`${config.appName} - ${config.title}`);
         setIsError(true);
         setIsWarning(false);
         setErrorMsg(error.toString());

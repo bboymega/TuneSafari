@@ -1,4 +1,7 @@
 {
     "maxDuration": 10,
-    "apiBaseUrl": "http://172.16.241.129:8080/"
+    "apiBaseUrl": "http://172.16.241.129:8080/",
+    "appName": "TuneScout",
+    "title": "Find the tracks that sticks",
+    "description": "TuneScout - Find the tracks that sticks"
 }

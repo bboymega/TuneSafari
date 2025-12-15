@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from 'next/navigation';
 import config from './config.json'
 
-export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle}) {
+export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle }) {
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -72,11 +72,11 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
     recorder.start();
     setIsRecording(true);
     setDisabled(true);
-    setTitle('TuneScout - Recording...');
+    setTitle(`${config.appName} - Recording...`);
     // Permission denied
     } catch (err) {
       setErrorMsg(`Error accessing microphone: ${err}`);
-      setTitle('TuneScout - Find the tracks that sticks');
+      setTitle(`${config.appName} - Find the tracks that sticks`);
       setIsWarning(false);
       setIsError(true);
       setIsRecording(false);
@@ -111,14 +111,14 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
           router.push(`/results/${resultToken}`);
         }
         else {
-          setTitle('TuneScout - Find the tracks that sticks');
+          setTitle(`${config.appName} - ${config.title}`);
           setIsError(false);
           setIsWarning(true);
           setWarnMsg('Warning: No results were found');
         }
       }
     } catch (error) {
-      setTitle('TuneScout - Find the tracks that sticks');
+      setTitle(`${config.appName} - ${config.title}`);
       setIsError(true);
       setIsWarning(false);
       setErrorMsg(error.toString());

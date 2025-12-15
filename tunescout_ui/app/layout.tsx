@@ -5,6 +5,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import 'typeface-roboto';
 import "./styles.css";
+import config from "./config.json"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,8 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TuneScout - Find the tracks that sticks",
-  description: "TuneScout - Find the track that sticks"
+  title: `${config.appName} - ${config.title}`,
+  description: `${config.description}`
 };
 
 export const viewport: Viewport = {

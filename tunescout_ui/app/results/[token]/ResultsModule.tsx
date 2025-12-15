@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import ErrorAlert from '@/app/ErrorAlert';
 import SuccessAlert from '@/app/SuccessAlert';
+import config from '@/app/config.json';
 
 type SongResult = {
   song_name: string;
@@ -10,9 +11,11 @@ type SongResult = {
 
 type ResultsModuleProps = {
   resultsJson: { results: SongResult[] };
+  setProgress;
+  setShowProgress;
 };
 
-export default function ResultsModule({ resultsJson }: ResultsModuleProps) {
+export default function ResultsModule({ resultsJson, setProgress, setShowProgress }: ResultsModuleProps) {
   const router = useRouter();
   const [errorMsg, setErrorMsg] = useState("");
   const [isError, setIsError] = useState(false);
@@ -82,7 +85,7 @@ export default function ResultsModule({ resultsJson }: ResultsModuleProps) {
         />
       )}
       <div className="text-center" id="panel">
-        <h1 className="mx-auto my-0 mt-2 mb-5 text-uppercase">TuneScout</h1>
+        <h1 className="mx-auto my-0 mt-2 mb-5 text-uppercase">{config.appName}</h1>
         <h2 className="mx-auto mt-2 mb-4">Possible Results</h2>
         <div id="resultsList" className="list-group">
           {resultsJson.results.map((result, index) => {
@@ -154,7 +157,12 @@ export default function ResultsModule({ resultsJson }: ResultsModuleProps) {
           <button
             className="btn btn-dark mx-auto mt-4 mb-2"
             style={{ padding: '10px 20px' }}
-            onClick={() => router.push('/')}
+            onClick={() => 
+              {
+                router.push('/');
+                setShowProgress(true);
+                setProgress(66);
+              }}
           >
             Return <i className="fa-solid fa-circle-chevron-left"></i>
           </button>
