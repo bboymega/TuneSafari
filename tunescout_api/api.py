@@ -99,7 +99,7 @@ def recognize_api():
                         if request.form.get('duration'):
                             duration = float(request.form.get('duration'))
                             if duration > max_duration * 1.0:
-                                duration = max_duration
+                                duration = max_duration * 1.0
                         else:
                             duration = max_duration * 1.0
 
@@ -125,10 +125,17 @@ def recognize_api():
                     start_time = float(request.form.get('start'))
                 else:
                     start_time = 0.0
+                
+                if request.form.get('duration'):
+                    duration = float(request.form.get('duration'))
+                    blob = ffmpeg.input('pipe:0', ss=start_time, t=duration) \
+                    .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=1, sample_fmt='s16') \
+                    .run(input=blob, capture_stdout=True, capture_stderr=True)[0]
+                else:
+                    blob = ffmpeg.input('pipe:0', ss=start_time) \
+                    .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=1, sample_fmt='s16') \
+                    .run(input=blob, capture_stdout=True, capture_stderr=True)[0]
 
-                blob = ffmpeg.input('pipe:0', ss=start_time) \
-                .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=1, sample_fmt='s16') \
-                .run(input=blob, capture_stdout=True, capture_stderr=True)[0]
             except Exception as e:
                 sys.stderr.write("\033[31m" + f"{request.remote_addr} - - {datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')} \"ERROR: Failed to process input file\" -" + "\033[0m\n")
                 return jsonify({

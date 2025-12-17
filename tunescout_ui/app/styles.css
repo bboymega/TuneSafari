@@ -809,7 +809,8 @@ body {
 /* --- Trimmer Container and Base --- */
 .video-trimmer-container {
     width: 100%;
-    max-width: 800px; /* Max width for better visual control */
+    min-width: 350px;
+    max-width: 1000px; /* Max width for better visual control */
     margin: 20px auto;
     user-select: none; /* Prevents text selection while dragging */
     font-family: "OPTICopperplate-Light", sans-serif;
@@ -880,6 +881,66 @@ body {
     padding: 2px 6px;
     border-radius: 3px;
     white-space: nowrap;
+    /* Undo the handle's transform so the label stays centered */
+    transform: translateX(50%); 
+}
+
+.time-label-edit-start {
+    position: absolute;
+    top: -25px; /* Position above the track */
+    font-size: 0.75rem;
+    color: #fff;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    width: 60px;
+    z-index: 150;
+    /* Undo the handle's transform so the label stays centered */
+    transform: translateX(-50%); 
+}
+
+.time-label-edit-start-error {
+    position: absolute;
+    top: -25px; /* Position above the track */
+    font-size: 0.75rem;
+    color: #fff;
+    background-color: rgba(137, 0, 0, 0.7);
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    width: 60px;
+    z-index: 150;
+    /* Undo the handle's transform so the label stays centered */
+    transform: translateX(-50%); 
+}
+
+.time-label-edit-end {
+    position: absolute;
+    top: -25px; /* Position above the track */
+    font-size: 0.75rem;
+    color: #fff;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    width: 60px;
+    z-index: 150;
+    /* Undo the handle's transform so the label stays centered */
+    transform: translateX(50%); 
+}
+
+.time-label-edit-end-error {
+    position: absolute;
+    top: -25px; /* Position above the track */
+    font-size: 0.75rem;
+    color: #fff;
+    background-color: rgba(137, 0, 0, 0.7);
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    width: 60px;
+    z-index: 150;
     /* Undo the handle's transform so the label stays centered */
     transform: translateX(50%); 
 }
