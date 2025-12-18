@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import AudioRecorder from "./AudioRecorder";
 import FileSelector from './FileSelector';
 import ErrorAlert from './ErrorAlert';
@@ -19,6 +19,7 @@ export default function index() {
   const [showProgress, setShowProgress] = useState(false);
   const [uploadState, setUploadState] = useState("Uploading...");
   const currentYear = new Date().getFullYear();
+  const mainDivRef = useRef<HTMLDivElement>(null);
 
   function ProgressBar() {
     return (
@@ -128,7 +129,7 @@ useEffect(() => {
 
 return (
   <>
-    <div id="main">
+    <div id="main" ref={mainDivRef}>
       {showProgress &&
         <ProgressBar/>
       }
@@ -172,6 +173,7 @@ return (
                 setWarnMsg={setWarnMsg}
                 setIsWarning={setIsWarning}
                 setTitle={setTitle}
+                mainDivRef={mainDivRef}
               />
               <h2 className="mx-auto mt-2 mb-4">or upload a file</h2>
               <FileSelector
@@ -183,6 +185,7 @@ return (
                 setWarnMsg={setWarnMsg}
                 setIsWarning={setIsWarning}
                 setTitle={setTitle}
+                mainDivRef={mainDivRef}
                 />
             </div>
           </div>

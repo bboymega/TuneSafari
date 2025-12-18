@@ -3,7 +3,7 @@ import { useRouter } from 'next/navigation';
 import config from './config.json'
 import CloseButton from 'react-bootstrap/CloseButton';
 
-export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle }) {
+export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle, mainDivRef }) {
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [cancelled, setCancelled] = useState(false);
@@ -16,6 +16,7 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
     setSeconds(0);
     setCancelled(true);
     setTitle(`${config.appName} - ${config.title}`);
+    mainDivRef.current.style.userSelect = "auto";
     if (activeStreamRef.current) {
         // Stop every track (audio and video, if present)
         activeStreamRef.current.getTracks().forEach(track => {
@@ -45,6 +46,7 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
       // Stop and reset counting if recording stops
       clearInterval(interval);
       setSeconds(0);
+      mainDivRef.current.style.userSelect = "auto";
     }
     return () => clearInterval(interval);
   }, [isRecording]);
@@ -58,6 +60,7 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
   const startRecording = async () => {
     // Request microphone permission first
     try {
+      mainDivRef.current.style.userSelect = "none";
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           channelCount: 1, 
@@ -100,6 +103,7 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
       setIsError(true);
       setIsRecording(false);
       setDisabled(false);
+      mainDivRef.current.style.userSelect = "auto";
     }
   };
 

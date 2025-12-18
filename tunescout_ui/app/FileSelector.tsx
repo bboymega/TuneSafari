@@ -1,9 +1,9 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useLayoutEffect } from "react";
 import { useRouter } from 'next/navigation';
 import config from './config.json';
 import CloseButton from 'react-bootstrap/CloseButton';
 
-export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle }) {
+export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle, mainDivRef }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [fileName, setFileName] = useState<string | null>(null); // State to store filename
   const [selectedFile, setSelectedFile] = useState(null);
@@ -32,416 +32,287 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
       setDisabled(false);
     }
 
-    const TimelineZoom = ({setShowTimelineZoom, clipStart, setClipStart, clipEnd, setClipEnd}) => {
-        const [zoomLevel, setZoomLevel] = useState(1); // 1 = 100%, 2 = 200%, etc.
-        const MIN_CLIP_DURATION = 1; 
-        const MAX_CLIP_DURATION = config.maxDuration;
-        const timelineRef = useRef(null);
-        const [activeHandle, setActiveHandle] = useState(1); // 0: start handle, 1: end handle
-        const [position, setPosition] = useState({ x: 0, y: 0 });
-        const [isDragging, setIsDragging] = useState(false);
-        const offset = useRef({ x: 0, y: 0 });
+    const TimelineZoom = ({ setShowTimelineZoom, clipStart, setClipStart, clipEnd, setClipEnd }) => {
+      const [zoomLevel, setZoomLevel] = useState(1);
+      const MIN_CLIP_DURATION = 1;
+      const MAX_CLIP_DURATION = config.maxDuration;
+      const timelineRef = useRef(null);
+      const [activeHandle, setActiveHandle] = useState(1);
+      const [position, setPosition] = useState({ x: 0, y: 0 });
+      const [isDragging, setIsDragging] = useState(false);
+      const viewportRef = useRef(null);
+      const zoomSliderRef = useRef(null);
+      const offset = useRef({ x: 0, y: 0 });
 
-        // Refs for Dragging/Panning
-        const draggingHandleRef = useRef(null); // 'start', 'end', or 'middle'
-        const startDragTimeRef = useRef(0);    // Stores { clipStart, clipEnd } when pan starts
-        const startMouseXRef = useRef(0);     // Mouse X position when the drag/pan starts
+      const draggingHandleRef = useRef(null);
+      const startDragTimeRef = useRef({ clipStart: 0, clipEnd: 0 });
+      const startMouseXRef = useRef(0);
 
-        const getHandleZIndex = (handleType) => {
-          const startPercent = (clipStart / duration) * 100;
+      const getHandleZIndex = (handleType) => {
+        const startPercent = (clipStart / duration) * 100;
+        const ACTIVE_Z = 100;
+        const BACK_Z = 20;
+        if (startPercent > 95.0 && handleType === 'start') return ACTIVE_Z;
+        if (startPercent > 95.0 && handleType === 'end') return BACK_Z;
+        if (activeHandle === 0 && handleType === 'start') return ACTIVE_Z;
+        if (activeHandle === 1 && handleType === 'end') return ACTIVE_Z;
+        return BACK_Z;
+      };
 
-          // Base Z-index levels
-          const ACTIVE_Z = 100; // Always highest when dragging
-          const BACK_Z = 20;    // Lower Z-index for the handle that is behind
+      const formatTime = (seconds) => {
+        const min = Math.floor(seconds / 60);
+        const sec = Math.floor(seconds % 60);
+        return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+      };
 
-          // Prevent deadlock
-          if (startPercent > 95.0 && handleType === 'start') {
-            return ACTIVE_Z;
-          }
-          if (startPercent > 95.0 && handleType === 'end') {
-            return BACK_Z;
-          }
+      const getSelectedRangeStyle = () => {
+        const startPercent = (clipStart / duration) * 100;
+        const endPercent = (clipEnd / duration) * 100;
+        return { left: `${startPercent}%`, width: `${endPercent - startPercent}%` };
+      };
 
-          // When dragging
-          if (activeHandle === 0 && handleType === 'start') {
-            return ACTIVE_Z; 
-          }
-          if (activeHandle === 1 && handleType === 'end') {
-            return ACTIVE_Z;
-          }
+      const handlePointerMove = useCallback((e) => {
+        if (!draggingHandleRef.current || !timelineRef.current) return;
+        const trackBounds = timelineRef.current.getBoundingClientRect();
+        const trackWidth = trackBounds.width;
+        const handleType = draggingHandleRef.current;
+        const currentX = e.clientX;
 
-          // The handle behind
-          if (handleType === 'start') {
-            return BACK_Z; 
-          }
-          if (handleType === 'end') {
-            return BACK_Z;
-          }
-          // Fallback
-          return BACK_Z;
-        };
-        
-        const formatTime = (seconds) => {
-          const min = Math.floor(seconds / 60);
-          const sec = Math.floor(seconds % 60);
-          return `${min}:${sec < 10 ? '0' : ''}${sec}`;
-        };
+        if (handleType === 'middle') {
+          const mouseDeltaX = currentX - startMouseXRef.current;
+          const timeDelta = (mouseDeltaX / trackWidth) * duration;
+          let newStart = startDragTimeRef.current.clipStart + timeDelta;
+          let newEnd = startDragTimeRef.current.clipEnd + timeDelta;
 
-        const getSelectedRangeStyle = () => {
-          const startPercent = (clipStart / duration) * 100;
-          const endPercent = (clipEnd / duration) * 100;
-          const widthPercent = endPercent - startPercent;
-          return {
-            left: `${startPercent}%`,
-            width: `${widthPercent}%`,
-          };
-        };
-
-        // Zoom Timeline dragging
-        const handleMouseMove = useCallback((e) => {
-          if (!draggingHandleRef.current || !timelineRef.current) return;
-          const trackBounds = timelineRef.current.getBoundingClientRect();
-          const trackWidth = trackBounds.width;
-          const handleType = draggingHandleRef.current;
-
-          // Panning the Entire Bar (Middle Drag)
-          if (handleType === 'middle') {
-            const mouseDeltaX = e.clientX - startMouseXRef.current;
-            // Convert pixel delta to time delta
-            const timeDelta = (mouseDeltaX / trackWidth) * duration;
-            let newStart = startDragTimeRef.current.clipStart + timeDelta;
-            let newEnd = startDragTimeRef.current.clipEnd + timeDelta;
-            // Clamp Panning: Ensure the bar stays within the total duration (0 to duration)
-            if (newStart < 0) {
-              const offset = 0 - newStart; 
-              newStart += offset;
-              newEnd += offset;
-            }
-            if (newEnd > duration) {
-              const offset = newEnd - duration;
-              newStart -= offset;
-              newEnd -= offset;
-            }
-            setClipStart(newStart);
-            setClipEnd(newEnd);
-            return; // Stop here for pan logic
-          }
-
-          // Start/End Drag
-          const newPixelPosition = e.clientX - trackBounds.left;
-          let newTime = (newPixelPosition / trackWidth) * duration;
-          newTime = Math.max(0, Math.min(duration, newTime)); // Total track clamping
-          if (handleType === 'start') {
-            setActiveHandle(0); 
-            const maxStart = clipEnd - MIN_CLIP_DURATION;
-            newTime = Math.min(newTime, maxStart);
-            //Max Duration Scrubbing
-            const currentDuration = clipEnd - newTime;
-            if (currentDuration > MAX_CLIP_DURATION) {
-              const durationExceededBy = currentDuration - MAX_CLIP_DURATION;
-              const newClipEnd = clipEnd - durationExceededBy;
-              const finalClipEnd = Math.min(duration, newClipEnd);
-                
-              // Update both handles
-              setClipStart(newTime); // newTime is already track-clamped
-              setClipEnd(finalClipEnd);
-
-            } else {
-              // If within max duration limit, just update the start handle
-              setClipStart(newTime);
-              if (clipEnd - newTime <= MIN_CLIP_DURATION) {
-                setClipEnd(newTime + MIN_CLIP_DURATION);
-              }
-            }
-          } else if (handleType === 'end') {
-            setActiveHandle(1);
-            const minEnd = clipStart + MIN_CLIP_DURATION;
-            newTime = Math.max(newTime, minEnd);
-            // Max Duration Scrubbing
-            const currentDuration = newTime - clipStart;
-            if (currentDuration > MAX_CLIP_DURATION) {
-              const durationExceededBy = currentDuration - MAX_CLIP_DURATION;
-              const newClipStart = clipStart + durationExceededBy;
-              // Ensure the new clipStart doesn't violate track boundaries (>= 0)
-              const finalClipStart = Math.max(0, newClipStart);
-                
-              // Update both handles
-              setClipStart(finalClipStart);
-              setClipEnd(newTime); // newTime is already track-clamped
-
-            } else {
-              // If within max duration limit, just update the end handle
-              setClipEnd(newTime);
-              if (newTime - clipStart <= MIN_CLIP_DURATION) {
-                setClipStart(newTime - MIN_CLIP_DURATION);
-              }
-            }
-          }
-        }, [clipStart, clipEnd, duration]);
-
-        // Clamping to ensure that clipStart is always before clipEnd
-        useEffect(() => {
-          // Ensure clipStart is always >= 0
-          const clampedClipStart = Math.max(0, clipStart);
-
-          // Ensure clipEnd is always <= the duration
-          const clampedClipEnd = Math.min(duration, clipEnd);
-
-          // Ensure clipStart is always less than clipEnd
-          const validClipStart = Math.min(clampedClipStart, clampedClipEnd);
-          const validClipEnd = Math.max(clampedClipStart, clampedClipEnd);
-
-          // Apply the final clamped values back to the state
-          if (validClipStart !== clipStart) {
-            setClipStart(validClipStart);
-          }
-          if (validClipEnd !== clipEnd) {
-            setClipEnd(validClipEnd);
-          }
-        }, [clipStart, clipEnd, duration]);
-
-        // Media seeking when the start handle is dragged or panning
-        useEffect(() => {
-          const video = videoRef.current;
-          if (video && video.readyState >= 1 && activeHandle != 1) {
-            video.currentTime = clipStart;
-          }
-        }, [clipStart, activeHandle]);
-      
-        // Media seeking when the end handle is dragged
-        useEffect(() => {
-          const video = videoRef.current;
-          if (video && video.readyState >= 1 && activeHandle === 1) {
-            video.currentTime = clipEnd;
-          }
-        }, [clipEnd, activeHandle]);
-
-        // Limit the playback to the selected part
-        useEffect(() => {
-          const video = videoRef.current;
-          if (!video) return;
-
-          const handleTimeUpdate = () => {
-            if (video.currentTime <= clipStart - 0.001) {
-              video.pause();
-              video.currentTime = clipStart;
-            }
-            if (video.currentTime >= clipEnd + 0.001) {
-              if (! video.paused) {
-                video.currentTime = clipStart;
-                video.play();
-              } else {
-                video.pause();
-                video.currentTime = clipStart;
-              }
-            }
-          };
-
-          const handleVideoEnded = () => {
-            video.play();
-          };
-
-          video.addEventListener('timeupdate', handleTimeUpdate);
-          video.addEventListener('ended', handleVideoEnded);
-
-          return () => {
-            video.removeEventListener('timeupdate', handleTimeUpdate);
-            video.removeEventListener('ended', handleVideoEnded);
-          };
-        }, [clipStart, clipEnd, videoRef]);
-
-        // Callback to start the drag operation
-        const handleMouseDown = (handleType, e) => {
-          // Indicate which handle is being dragged
-          draggingHandleRef.current = handleType;
-          if (handleType === 'middle') {
-            // Store the initial state for the panning calculation
-            startDragTimeRef.current = { clipStart, clipEnd };
-            startMouseXRef.current = e.clientX;
-            e.preventDefault(); // Crucial to prevent unwanted side effects (like image drag)
-          }
-          document.addEventListener('mousemove', handleMouseMove);
-          document.addEventListener('mouseup', handleMouseUp);
-        };
-
-        // Callback to stop the drag operation
-        const handleMouseUp = useCallback(() => {
-          draggingHandleRef.current = null;
-          document.removeEventListener('mousemove', handleMouseMove);
-          document.removeEventListener('mouseup', handleMouseUp);
-        }, [handleMouseMove]);
-
-        const handleTimelineZoomCloseButtonClick = () => {
-          setShowTimelineZoom(false);
+          if (newStart < 0) { const off = 0 - newStart; newStart += off; newEnd += off; }
+          if (newEnd > duration) { const off = newEnd - duration; newStart -= off; newEnd -= off; }
+          setClipStart(newStart);
+          setClipEnd(newEnd);
+          return;
         }
 
-        const handleDragMouseDown = (e) => {
-          setIsDragging(true);
-          offset.current = {
-            x: e.clientX - position.x,
-            y: e.clientY - position.y
-          };
-        };
+        const newPixelPosition = currentX - trackBounds.left;
+        let newTime = (newPixelPosition / trackWidth) * duration;
+        newTime = Math.max(0, Math.min(duration, newTime));
 
-        useEffect(() => {
-          const handleDragMouseMove = (e) => {
-            if (!isDragging) return;
+        if (handleType === 'start') {
+          setActiveHandle(0);
+          const maxStart = clipEnd - MIN_CLIP_DURATION;
+          newTime = Math.min(newTime, maxStart);
+          if (clipEnd - newTime > MAX_CLIP_DURATION) {
+            setClipStart(newTime);
+            setClipEnd(Math.min(duration, newTime + MAX_CLIP_DURATION));
+          } else {
+            setClipStart(newTime);
+            if (clipEnd - newTime <= MIN_CLIP_DURATION) setClipEnd(newTime + MIN_CLIP_DURATION);
+          }
+        } else if (handleType === 'end') {
+          setActiveHandle(1);
+          const minEnd = clipStart + MIN_CLIP_DURATION;
+          newTime = Math.max(newTime, minEnd);
+          if (newTime - clipStart > MAX_CLIP_DURATION) {
+            setClipEnd(newTime);
+            setClipStart(Math.max(0, newTime - MAX_CLIP_DURATION));
+          } else {
+            setClipEnd(newTime);
+            if (newTime - clipStart <= MIN_CLIP_DURATION) setClipStart(newTime - MIN_CLIP_DURATION);
+          }
+        }
+      }, [clipStart, clipEnd, duration, MAX_CLIP_DURATION]);
 
-            const newX = e.clientX - offset.current.x;
-            const newY = e.clientY - offset.current.y;
+      const handlePointerUp = useCallback(() => {
+        draggingHandleRef.current = null;
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+      }, [handlePointerMove]);
+
+      const handlePointerDown = (handleType, e) => {
+        e.stopPropagation();
+        e.target.setPointerCapture?.(e.pointerId);
+        draggingHandleRef.current = handleType;
+        startMouseXRef.current = e.clientX;
+        startDragTimeRef.current = { clipStart, clipEnd };
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp);
+      };
+
+      const handleWheel = useCallback((e) => {
+        e.preventDefault();
+        if (!timelineRef.current) return;
+        const trackWidth = timelineRef.current.getBoundingClientRect().width;
+        const pixelDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        const timeDelta = (pixelDelta / trackWidth) * duration * 0.3;
+
+        setClipStart(() => {
+          let currentDuration = clipEnd - clipStart;
+          currentDuration = Math.max(MIN_CLIP_DURATION, Math.min(MAX_CLIP_DURATION, currentDuration));
             
-            setPosition({ x: newX, y: newY });
-          };
+          let newStart = clipStart + timeDelta;
+          let newEnd = newStart + currentDuration;
 
-          const handleDragMouseUp = () => {
-            setIsDragging(false);
-          };
-
-          if (isDragging) {
-            // Attach to window so fast movements don't break the drag
-            window.addEventListener('mousemove', handleDragMouseMove);
-            window.addEventListener('mouseup', handleDragMouseUp);
+          if (newStart < 0) {
+            newStart = 0;
+            newEnd = currentDuration;
+          } else if (newEnd > duration) {
+            newEnd = duration;
+            newStart = duration - currentDuration;
           }
 
-          return () => {
-            window.removeEventListener('mousemove', handleDragMouseMove);
-            window.removeEventListener('mouseup', handleDragMouseUp);
-          };
-        }, [isDragging, position.x, position.y]);
+          setClipEnd(newEnd);
+          return newStart;
+        });
+      }, [clipEnd, duration, MIN_CLIP_DURATION, MAX_CLIP_DURATION, setClipEnd, setClipStart]);
 
-        return (
-        <>
+
+      useEffect(() => {
+        const viewport = viewportRef.current;
+        if (!viewport) return;
+        viewport.addEventListener('wheel', handleWheel, { passive: false });
+        return () => viewport.removeEventListener('wheel', handleWheel);
+      }, [handleWheel]);
+
+      useEffect(() => {
+        const slider = zoomSliderRef.current;
+        if (!slider) return;
+        const handleZoomWheel = (e) => {
+          e.preventDefault(); e.stopPropagation();
+          const direction = e.deltaY < 0 ? 1 : -1;
+          setZoomLevel((prev) => Math.max(1, Math.min(10, prev + direction * 0.5)));
+        };
+        slider.addEventListener('wheel', handleZoomWheel, { passive: false });
+        return () => slider.removeEventListener('wheel', handleZoomWheel);
+      }, []);
+
+      const handleDragPointerDown = (e) => {
+        setIsDragging(true);
+        offset.current = { x: e.clientX - position.x, y: e.clientY - position.y };
+        e.target.setPointerCapture(e.pointerId);
+      };
+
+      useEffect(() => {
+        const handleMove = (e) => {
+          if (!isDragging) return;
+          setPosition({ x: e.clientX - offset.current.x, y: e.clientY - offset.current.y });
+        };
+        const handleUp = () => setIsDragging(false);
+        if (isDragging) {
+          window.addEventListener('pointermove', handleMove);
+          window.addEventListener('pointerup', handleUp);
+        }
+        return () => {
+          window.removeEventListener('pointermove', handleMove);
+          window.removeEventListener('pointerup', handleUp);
+        };
+      }, [isDragging]);
+
+      const adjustFocus = useCallback(() => {
+        if (timelineRef.current && viewportRef.current) {
+          const timeline = timelineRef.current;
+          const viewport = viewportRef.current;
+          const scrollPosition = (clipStart / duration) * (timeline.scrollWidth - viewport.clientWidth);
+          viewport.scrollTo({ left: scrollPosition, behavior: 'smooth' });
+        }
+      }, [clipStart, duration]);
+
+      useLayoutEffect(() => { adjustFocus(); }, [zoomLevel, clipStart, adjustFocus]);
+
+      return (
+        <div
+          id="zoomControl"
+          style={{
+            position: "fixed", top: `calc(50% + ${position.y}px)`, left: `calc(50% + ${position.x}px)`,
+            transform: "translate(-50%, -50%)", backgroundColor: "rgba(0,0,0,0.95)", color: "#fff",
+            padding: "10px 20px", borderRadius: "5px", zIndex: 9999, touchAction: "none", userSelect: "none"
+          }}
+        >
           <div
-            id="zoomControl"
-            onDragStart={(e) => e.preventDefault()}
+            onPointerDown={handleDragPointerDown}
             style={{
-              fontFamily: '"OPTICopperplate-Light", sans-serif',
-              position: "fixed",
-              top: `calc(50% + ${position.y}px)`,
-              left: `calc(50% + ${position.x}px)`,
-              transform: "translate(-50%, -50%)",
-              backgroundColor: "rgba(0,0,0,0.95)",
-              color: "#fff",
-              padding: "10px 20px",
-              borderRadius: "5px",
-              fontSize: "1rem",
-              textAlign: "center",
-              zIndex: 9999,
-              touchAction: "none"
+              position: 'absolute', top: 0, left: 0, right: 0, height: '40px',
+              backgroundColor: 'rgba(255, 255, 255, 0.1)', cursor: 'grab',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '5px 5px 0 0'
             }}
           >
-            <div
-              onMouseDown={handleDragMouseDown}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                height: '40px',
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                cursor: 'grab',
-                borderRadius: '5px 5px 0 0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              {/* Simple visual indicator for the drag handle */}
-              <div style={{ width: '30px', height: '2px', backgroundColor: '#6d6d6dff' }}></div>
-            </div>
-            <CloseButton 
-              aria-label='Hide'
-              variant= 'white'
-              style = {{
-                zIndex: 200,
-                position: 'absolute',
-                top: '8px',
-                right: '8px',
-                fontSize: '1rem'
-                }}
-              onClick = {handleTimelineZoomCloseButtonClick}
-              />
-              <div className="video-trimmer-container mt-5">
-                <div className="d-flex flex-column align-items-center mb-4">
-                  <div className="d-flex align-items-center gap-3" style={{ width: '300px' }}>
-                    <i className="fa-solid fa-magnifying-glass-minus text-white"></i>
-                    <input
-                        type="range"
-                        className="form-range custom-zoom-slider"
-                        min="1"
-                        max="10"
-                        step="0.1"
-                        value={zoomLevel}
-                        onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
-                        // PREVENT PARENT INTERFERENCE:
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onTouchStart={(e) => e.stopPropagation()}
-                        style={{ cursor: 'pointer', touchAction: 'none' }} // touchAction: 'none' helps mobile sliding
-                      />
-                    <i className="fa-solid fa-magnifying-glass-plus text-white"></i>
-                  </div>
-                  <small className="text-white-50 mt-1">Zoom: {zoomLevel.toFixed(1)}x</small>
-                </div>
-
-                <div className="mx-auto mb-3">
-                  <span className="time-label-zoom-start">
-                        {formatTime(clipStart)}
-                  </span>
-                  <span className="time-label-zoom-end">
-                        {formatTime(clipEnd)}
-                </span>
-                </div>
-
-                {/* Viewport: This stays fixed width, content inside expands */}
-                <div className="timeline-viewport" style={{ overflowX: 'auto', width: '100%', padding: '20px 0' }}>
-                  <div
-                    className="timeline-track"
-                    ref={timelineRef}
-                    style={{
-                      width: `${100 * zoomLevel}%`, // Expands based on zoom
-                      position: 'relative',
-                      height: '40px',
-                      backgroundColor: '#333',
-                      transition: 'width 0.2s ease-out',
-                    }}
-                  >
-                    <div
-                      className="trimmer-handle left-handle"
-                      style={{ left: `${(clipStart / duration) * 100}%`, zIndex: getHandleZIndex('start') }}
-                      onMouseDown={(e) => handleMouseDown('start', e)}
-                    >
-                      <div className="handle-grip"></div>
-                    </div>
-
-                    <div
-                      className="selected-range"
-                      style={getSelectedRangeStyle()}
-                      onMouseDown={(e) => handleMouseDown('middle', e)}
-                    ></div>
-
-                    <div
-                      className="trimmer-handle right-handle"
-                      style={{ left: `${(clipEnd / duration) * 100}%`, zIndex: getHandleZIndex('end') }}
-                      onMouseDown={(e) => handleMouseDown('end', e)}
-                    >
-                      <div className="handle-grip"></div>
-                    </div>
-                  </div>
-                </div> 
-              </div>
+            <div style={{ width: '30px', height: '2px', backgroundColor: '#6d6d6dff' }}></div>
           </div>
-        </>
-      )
-    }
+
+          <CloseButton 
+            variant="white" 
+            style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 200 }} 
+            onClick={() => setShowTimelineZoom(false)} 
+          />
+
+          <div className="video-trimmer-container mt-5" style={{ width: '350px' }}>
+            <div className="d-flex flex-column align-items-center mb-4">
+              <div className="d-flex align-items-center gap-3" style={{ width: '300px' }}>
+                <i className="fa-solid fa-magnifying-glass-minus text-white"></i>
+                <input
+                  type="range"
+                  ref={zoomSliderRef}
+                  className="form-range custom-zoom-slider"
+                  min="1"
+                  max="10"
+                  step="0.1"
+                  value={zoomLevel}
+                  onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+                  onPointerDown={(e) =>  e.stopPropagation()}
+                  style={{ cursor: 'pointer', touchAction: 'none' }}
+                />
+                <i className="fa-solid fa-magnifying-glass-plus text-white"></i>
+              </div>
+              <small className="text-white-50 mt-1">Zoom: {zoomLevel.toFixed(1)}x</small>
+            </div>
+
+            <div className="mx-auto mb-3">
+              <span className="time-label-zoom-start">{formatTime(clipStart)}</span>
+              <span className="time-label-zoom-end">{formatTime(clipEnd)}</span>
+            </div>
+
+            <div className="timeline-viewport" ref={viewportRef} style={{ overflowX: 'auto', width: '100%', padding: '20px 0' }}>
+              <div
+                className="timeline-track"
+                ref={timelineRef}
+                style={{
+                  width: `${100 * zoomLevel}%`, position: 'relative',
+                  height: '40px', backgroundColor: '#333', touchAction: 'none'
+                }}
+              >
+                <div
+                  className="trimmer-handle left-handle"
+                  style={{ left: `${(clipStart / duration) * 100}%`, zIndex: getHandleZIndex('start') }}
+                  onPointerDown={(e) => handlePointerDown('start', e)}
+                >
+                  <div className="handle-grip"></div>
+                </div>
+                <div
+                  className="selected-range"
+                  style={getSelectedRangeStyle()}
+                  onPointerDown={(e) => handlePointerDown('middle', e)}
+                ></div>
+
+                <div
+                  className="trimmer-handle right-handle"
+                  style={{ left: `${(clipEnd / duration) * 100}%`, zIndex: getHandleZIndex('end') }}
+                  onPointerDown={(e) => handlePointerDown('end', e)}
+                >
+                  <div className="handle-grip"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
 
     function TrimmerHandler({ handleRecognizeFile }) {
-      const MIN_CLIP_DURATION = 1; 
+      const MIN_CLIP_DURATION = 1;
       const MAX_CLIP_DURATION = config.maxDuration;
       const initialClipEnd = Math.min(MAX_CLIP_DURATION, duration);
-      const [clipStart, setClipStart] = useState(0); 
+
+      const [clipStart, setClipStart] = useState(0);
       const [clipEnd, setClipEnd] = useState(initialClipEnd);
       const timelineRef = useRef(null);
-      const [activeHandle, setActiveHandle] = useState(1); // 0: start handle, 1: end handle
+      const [activeHandle, setActiveHandle] = useState(1);
       const [isEditingStart, setIsEditingStart] = useState(false);
       const [isEditingEnd, setIsEditingEnd] = useState(false);
       const [rawClipStartInput, setRawClipStartInput] = useState("");
@@ -449,19 +320,16 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
       const [passStartTimeRegexCheck, setPassStartTimeRegexCheck] = useState(true);
       const [passEndTimeRegexCheck, setPassEndTimeRegexCheck] = useState(true);
       const [showTimelineZoom, setShowTimelineZoom] = useState(false);
-      
-      // Refs for Dragging/Panning
-      const draggingHandleRef = useRef(null); // 'start', 'end', or 'middle'
-      const startDragTimeRef = useRef(0);    // Stores { clipStart, clipEnd } when pan starts
-      const startMouseXRef = useRef(0);     // Mouse X position when the drag/pan starts
-      
+
+      const draggingHandleRef = useRef(null);
+      const startDragTimeRef = useRef({ clipStart: 0, clipEnd: 0 });
+      const startMouseXRef = useRef(0);
+
       const timeCheckRegex = /^([0-9]{0,5}|[0-9]{0,4}:[0-9]{0,2})$/;
 
-      useEffect (() => {
-        if(! showMediaTrimmer) {
-          setShowTimelineZoom(false);
-        }
-      }, [showMediaTrimmer])
+      useEffect(() => {
+        if (!showMediaTrimmer) setShowTimelineZoom(false);
+      }, [showMediaTrimmer]);
 
       const confirmMediaTrim = () => {
         const clipDuration = clipEnd - clipStart;
@@ -471,91 +339,52 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
 
       const getHandleZIndex = (handleType) => {
         const startPercent = (clipStart / duration) * 100;
-
-        // Base Z-index levels
-        const ACTIVE_Z = 100; // Always highest when dragging
-        const BACK_Z = 20;    // Lower Z-index for the handle that is behind
-
-        // Prevent deadlock
-        if (startPercent > 95.0 && handleType === 'start') {
-          return ACTIVE_Z;
-        }
-        if (startPercent > 95.0 && handleType === 'end') {
-          return BACK_Z;
-        }
-
-        // When dragging
-        if (activeHandle === 0 && handleType === 'start') {
-          return ACTIVE_Z; 
-        }
-        if (activeHandle === 1 && handleType === 'end') {
-          return ACTIVE_Z;
-        }
-
-        // The handle behind
-        if (handleType === 'start') {
-          return BACK_Z; 
-        }
-        if (handleType === 'end') {
-          return BACK_Z;
-        }
-        // Fallback
+        const ACTIVE_Z = 100;
+        const BACK_Z = 20;
+        if (startPercent > 95.0 && handleType === 'start') return ACTIVE_Z;
+        if (startPercent > 95.0 && handleType === 'end') return BACK_Z;
+        if (activeHandle === 0 && handleType === 'start') return ACTIVE_Z;
+        if (activeHandle === 1 && handleType === 'end') return ACTIVE_Z;
         return BACK_Z;
       };
-      
+
       const formatTime = (seconds) => {
         const min = Math.floor(seconds / 60);
         const sec = Math.floor(seconds % 60);
         return `${min}:${sec < 10 ? '0' : ''}${sec}`;
       };
 
-      // Check if a time string is valid and convert time string to seconds
       const parseTime = (timeString) => {
         const cleanedString = timeString.trim();
-        
         if (cleanedString.includes(':')) {
           const parts = cleanedString.split(':');
-          
-          // mm:ss
           if (parts.length !== 2) return null;
-
           let [minStr, secStr] = parts;
-          // Handle "mm:" -> default seconds to 0
-          // Handle ":ss" -> default minutes to 0
           let minutes = minStr === "" ? 0 : parseInt(minStr, 10);
           let seconds = secStr === "" ? 0 : parseInt(secStr, 10);
-
-          // Validation: Ensure both parts are actually numbers (or were empty)
           if (isNaN(minutes) || isNaN(seconds)) return null;
-
-          // Optional: Over-limit seconds logic (e.g., 1:90 becomes 2:30)
           if (seconds > 59) {
             minutes += Math.floor(seconds / 60);
             seconds = seconds % 60;
           }
-
           return (minutes * 60) + seconds;
-        } 
-        else {
-          // Handle pure numbers
+        } else {
           if (!/^\d+$/.test(cleanedString)) return null;
           const totalSeconds = parseInt(cleanedString, 10);
           return (isNaN(totalSeconds) || totalSeconds < 0) ? null : totalSeconds;
         }
       };
 
-      // Time label edit
       const handleTimeInputChange = (e, method) => {
-        if(method == 0) {
-          if (! timeCheckRegex.test(e.target.value)) {
+        if (method === 0) {
+          if (!timeCheckRegex.test(e.target.value)) {
             setPassStartTimeRegexCheck(false);
             return;
           }
           setPassStartTimeRegexCheck(true);
-          setRawClipStartInput(e.target.value)
-        }
-        else if(method == 1) {
-          if (! timeCheckRegex.test(e.target.value)) {
+          setRawClipStartInput(e.target.value);
+        } else if (method === 1) {
+          if (!timeCheckRegex.test(e.target.value)) {
             setPassEndTimeRegexCheck(false);
             return;
           }
@@ -564,57 +393,48 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         }
       };
 
-      // Set clip start & end time when the user finishes editing time labels
       const handleTimeInputConfirm = (e, method) => {
         setPassEndTimeRegexCheck(true);
         let time = parseTime(e.target.value);
         if (time != null) {
-          if(method == 0) {
+          if (method === 0) {
             setActiveHandle(0);
             setIsEditingStart(false);
-            if(time <= duration - MIN_CLIP_DURATION) {
+            if (time <= duration - MIN_CLIP_DURATION) {
               if (time <= clipEnd - MIN_CLIP_DURATION) {
-                if(clipEnd - time <= MAX_CLIP_DURATION) {
+                if (clipEnd - time <= MAX_CLIP_DURATION) {
                   setClipStart(time);
-                }
-                else {
+                } else {
                   setClipEnd(time + MAX_CLIP_DURATION);
                   setClipStart(time);
                 }
-              }
-              else {
+              } else {
                 setClipEnd(time + MIN_CLIP_DURATION);
                 setClipStart(time);
               }
-            }
-            else {
+            } else {
               setClipEnd(duration);
               setClipStart(duration - MIN_CLIP_DURATION);
             }
-          }
-          else if (method == 1) {
+          } else if (method === 1) {
             setActiveHandle(1);
             setIsEditingEnd(false);
-            if(time > duration) {
+            if (time > duration) {
               setClipEnd(duration);
               setClipStart(duration - MAX_CLIP_DURATION);
-            } else
-            if(time >= MIN_CLIP_DURATION) {
-              if(time >= clipStart + MIN_CLIP_DURATION) {
+            } else if (time >= MIN_CLIP_DURATION) {
+              if (time >= clipStart + MIN_CLIP_DURATION) {
                 if (time - clipStart > MAX_CLIP_DURATION) {
                   setClipStart(time - MAX_CLIP_DURATION);
                   setClipEnd(time);
-                }
-                else {
+                } else {
                   setClipEnd(time);
                 }
-              }
-              else {
+              } else {
                 setClipStart(time - MIN_CLIP_DURATION);
-                setClipEnd(time)
+                setClipEnd(time);
               }
-            }
-            else {
+            } else {
               setClipStart(0);
               setClipEnd(MIN_CLIP_DURATION);
             }
@@ -626,7 +446,83 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         setRawClipEndInput(formatTime(clipEnd));
       };
 
-      // Reset error status when the user finishes editing time labels.
+      const handlePointerMove = useCallback((e) => {
+        if (!draggingHandleRef.current || !timelineRef.current) return;
+        const trackBounds = timelineRef.current.getBoundingClientRect();
+        const trackWidth = trackBounds.width;
+        const handleType = draggingHandleRef.current;
+      
+        const currentX = e.clientX;
+
+        if (handleType === 'middle') {
+          const mouseDeltaX = currentX - startMouseXRef.current;
+          const timeDelta = (mouseDeltaX / trackWidth) * duration;
+          let newStart = startDragTimeRef.current.clipStart + timeDelta;
+          let newEnd = startDragTimeRef.current.clipEnd + timeDelta;
+
+          if (newStart < 0) {
+            const offset = 0 - newStart; 
+            newStart += offset; newEnd += offset;
+          }
+          if (newEnd > duration) {
+            const offset = newEnd - duration;
+            newStart -= offset; newEnd -= offset;
+          }
+          setClipStart(newStart);
+          setClipEnd(newEnd);
+          return;
+        }
+
+        const newPixelPosition = currentX - trackBounds.left;
+        let newTime = (newPixelPosition / trackWidth) * duration;
+        newTime = Math.max(0, Math.min(duration, newTime));
+
+        if (handleType === 'start') {
+          setActiveHandle(0);
+          const maxStart = clipEnd - MIN_CLIP_DURATION;
+          newTime = Math.min(newTime, maxStart);
+          const currentDuration = clipEnd - newTime;
+          if (currentDuration > MAX_CLIP_DURATION) {
+            const exceeded = currentDuration - MAX_CLIP_DURATION;
+            setClipStart(newTime);
+            setClipEnd(Math.min(duration, clipEnd - exceeded));
+          } else {
+            setClipStart(newTime);
+            if (clipEnd - newTime <= MIN_CLIP_DURATION) setClipEnd(newTime + MIN_CLIP_DURATION);
+          }
+        } else if (handleType === 'end') {
+          setActiveHandle(1);
+          const minEnd = clipStart + MIN_CLIP_DURATION;
+          newTime = Math.max(newTime, minEnd);
+          const currentDuration = newTime - clipStart;
+          if (currentDuration > MAX_CLIP_DURATION) {
+            const exceeded = currentDuration - MAX_CLIP_DURATION;
+            setClipStart(Math.max(0, clipStart + exceeded));
+            setClipEnd(newTime);
+          } else {
+            setClipEnd(newTime);
+            if (newTime - clipStart <= MIN_CLIP_DURATION) setClipStart(newTime - MIN_CLIP_DURATION);
+          }
+        }
+      }, [clipStart, clipEnd, duration, MAX_CLIP_DURATION]);
+
+      const handlePointerUp = useCallback(() => {
+        draggingHandleRef.current = null;
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+      }, [handlePointerMove]);
+
+      const handlePointerDown = (handleType, e) => {
+        e.target.setPointerCapture?.(e.pointerId);
+        
+        draggingHandleRef.current = handleType;
+        startMouseXRef.current = e.clientX;
+        startDragTimeRef.current = { clipStart, clipEnd };
+
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp);
+      };
+
       useEffect(() => {
         setPassEndTimeRegexCheck(true);
         setRawClipStartInput(formatTime(clipStart));
@@ -637,288 +533,142 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         setRawClipEndInput(formatTime(clipEnd));
       }, [clipEnd]);
 
-
-      const getSelectedRangeStyle = () => {
-        const startPercent = (clipStart / duration) * 100;
-        const endPercent = (clipEnd / duration) * 100;
-        const widthPercent = endPercent - startPercent;
-        return {
-          left: `${startPercent}%`,
-          width: `${widthPercent}%`,
-        };
-      };
-
-      // Timeline dragging
-      const handleMouseMove = useCallback((e) => {
-        if (!draggingHandleRef.current || !timelineRef.current) return;
-        const trackBounds = timelineRef.current.getBoundingClientRect();
-        const trackWidth = trackBounds.width;
-        const handleType = draggingHandleRef.current;
-
-        // Panning the Entire Bar (Middle Drag)
-        if (handleType === 'middle') {
-          const mouseDeltaX = e.clientX - startMouseXRef.current;
-          // Convert pixel delta to time delta
-          const timeDelta = (mouseDeltaX / trackWidth) * duration;
-          let newStart = startDragTimeRef.current.clipStart + timeDelta;
-          let newEnd = startDragTimeRef.current.clipEnd + timeDelta;
-          // Clamp Panning: Ensure the bar stays within the total duration (0 to duration)
-          if (newStart < 0) {
-            const offset = 0 - newStart; 
-            newStart += offset;
-            newEnd += offset;
-          }
-          if (newEnd > duration) {
-            const offset = newEnd - duration;
-            newStart -= offset;
-            newEnd -= offset;
-          }
-          setClipStart(newStart);
-          setClipEnd(newEnd);
-          return; // Stop here for pan logic
-        }
-
-        // Start/End Drag
-        const newPixelPosition = e.clientX - trackBounds.left;
-        let newTime = (newPixelPosition / trackWidth) * duration;
-        newTime = Math.max(0, Math.min(duration, newTime)); // Total track clamping
-        if (handleType === 'start') {
-          setActiveHandle(0); 
-          const maxStart = clipEnd - MIN_CLIP_DURATION;
-          newTime = Math.min(newTime, maxStart);
-          //Max Duration Scrubbing
-          const currentDuration = clipEnd - newTime;
-          if (currentDuration > MAX_CLIP_DURATION) {
-            const durationExceededBy = currentDuration - MAX_CLIP_DURATION;
-            const newClipEnd = clipEnd - durationExceededBy;
-            const finalClipEnd = Math.min(duration, newClipEnd);
-              
-            // Update both handles
-            setClipStart(newTime); // newTime is already track-clamped
-            setClipEnd(finalClipEnd);
-
-          } else {
-            // If within max duration limit, just update the start handle
-            setClipStart(newTime);
-            if (clipEnd - newTime <= MIN_CLIP_DURATION) {
-              setClipEnd(newTime + MIN_CLIP_DURATION);
-            }
-          }
-        } else if (handleType === 'end') {
-          setActiveHandle(1);
-          const minEnd = clipStart + MIN_CLIP_DURATION;
-          newTime = Math.max(newTime, minEnd);
-          // Max Duration Scrubbing
-          const currentDuration = newTime - clipStart;
-          if (currentDuration > MAX_CLIP_DURATION) {
-            const durationExceededBy = currentDuration - MAX_CLIP_DURATION;
-            const newClipStart = clipStart + durationExceededBy;
-            // Ensure the new clipStart doesn't violate track boundaries (>= 0)
-            const finalClipStart = Math.max(0, newClipStart);
-              
-            // Update both handles
-            setClipStart(finalClipStart);
-            setClipEnd(newTime); // newTime is already track-clamped
-
-          } else {
-            // If within max duration limit, just update the end handle
-            setClipEnd(newTime);
-            if (newTime - clipStart <= MIN_CLIP_DURATION) {
-              setClipStart(newTime - MIN_CLIP_DURATION);
-            }
-          }
-        }
-      }, [clipStart, clipEnd, duration]);
-
-      // Clamping to ensure that clipStart is always before clipEnd
       useEffect(() => {
-        // Ensure clipStart is always >= 0
         const clampedClipStart = Math.max(0, clipStart);
-
-        // Ensure clipEnd is always <= the duration
         const clampedClipEnd = Math.min(duration, clipEnd);
-
-        // Ensure clipStart is always less than clipEnd
         const validClipStart = Math.min(clampedClipStart, clampedClipEnd);
         const validClipEnd = Math.max(clampedClipStart, clampedClipEnd);
-
-        // Apply the final clamped values back to the state
-        if (validClipStart !== clipStart) {
-          setClipStart(validClipStart);
-        }
-        if (validClipEnd !== clipEnd) {
-          setClipEnd(validClipEnd);
-        }
+        if (validClipStart !== clipStart) setClipStart(validClipStart);
+        if (validClipEnd !== clipEnd) setClipEnd(validClipEnd);
       }, [clipStart, clipEnd, duration]);
 
-      // Media seeking when the start handle is dragged or panning
       useEffect(() => {
         const video = videoRef.current;
-        if (video && video.readyState >= 1 && activeHandle != 1) {
-          video.currentTime = clipStart;
-        }
-      }, [clipStart, activeHandle]);
-    
-      // Media seeking when the end handle is dragged
-      useEffect(() => {
-        const video = videoRef.current;
-        if (video && video.readyState >= 1 && activeHandle === 1) {
-          video.currentTime = clipEnd;
-        }
-      }, [clipEnd, activeHandle]);
+        if (video && video.readyState >= 1 && activeHandle !== 1) video.currentTime = clipStart;
+      }, [clipStart, activeHandle, videoRef]);
 
-      // Limit the playback to the selected part
+      useEffect(() => {
+        const video = videoRef.current;
+        if (video && video.readyState >= 1 && activeHandle === 1) video.currentTime = clipEnd;
+      }, [clipEnd, activeHandle, videoRef]);
+
       useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
-
         const handleTimeUpdate = () => {
           if (video.currentTime <= clipStart - 0.001) {
-            video.pause();
-            video.currentTime = clipStart;
+            video.pause(); video.currentTime = clipStart;
           }
           if (video.currentTime >= clipEnd + 0.001) {
-            if (! video.paused) {
-              video.currentTime = clipStart;
-              video.play();
-            } else {
-              video.pause();
-              video.currentTime = clipStart;
-            }
+            video.currentTime = clipStart;
+            if (!video.paused) video.play(); else video.pause();
           }
         };
-
-        const handleVideoEnded = () => {
-          video.play();
-        };
-
         video.addEventListener('timeupdate', handleTimeUpdate);
-        video.addEventListener('ended', handleVideoEnded);
-
-        return () => {
-          video.removeEventListener('timeupdate', handleTimeUpdate);
-          video.removeEventListener('ended', handleVideoEnded);
-        };
+        return () => video.removeEventListener('timeupdate', handleTimeUpdate);
       }, [clipStart, clipEnd, videoRef]);
 
-      // Callback to start the drag operation
-      const handleMouseDown = (handleType, e) => {
-        // Indicate which handle is being dragged
-        draggingHandleRef.current = handleType;
-        if (handleType === 'middle') {
-          // Store the initial state for the panning calculation
-          startDragTimeRef.current = { clipStart, clipEnd };
-          startMouseXRef.current = e.clientX;
-          e.preventDefault(); // Crucial to prevent unwanted side effects (like image drag)
-        }
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
+      const getSelectedRangeStyle = () => {
+        const startP = (clipStart / duration) * 100;
+        const endP = (clipEnd / duration) * 100;
+        return { left: `${startP}%`, width: `${endP - startP}%` };
       };
-
-      // Callback to stop the drag operation
-      const handleMouseUp = useCallback(() => {
-        draggingHandleRef.current = null;
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      }, [handleMouseMove]);
 
       const handleTimelineZoom = () => {
         setShowTimelineZoom(true);
       };
 
-      return (
+    return (
       <>
-        {showTimelineZoom && (
-          <TimelineZoom
-            setShowTimelineZoom = {setShowTimelineZoom}
-            clipStart = {clipStart}
-            setClipStart = {setClipStart}
-            clipEnd = {clipEnd}
-            setClipEnd = {setClipEnd}
-          />
-        )}
-        <div className="video-trimmer-container mt-5">
-          <button
-            id="zoomBtn"
-            className="mx-auto btn btn-primary mb-3"
-            style={{"backgroundColor": "#212529", "color":"#f8f9fa", padding: "0.5rem 1rem"}}
-            onClick={handleTimelineZoom}
-            >
-              Zoom <i className="fa-solid fa-magnifying-glass"></i>
-          </button>
-          <div className="timeline-track" ref={timelineRef}>
-            <div 
-              className="trimmer-handle left-handle"
-              style={{ left: `${(clipStart / duration) * 100}%`, zIndex: getHandleZIndex('start')}}
-              onMouseDown={(e) => {e.stopPropagation(); handleMouseDown('start', e)}} // Pass event to handleMouseDown
-            >
-              <div className="handle-grip"></div>
-              { isEditingStart ? (
-                <input 
-                  type="text"
-                  className= { passStartTimeRegexCheck ? ("time-label-edit-start") : ("time-label-edit-start-error")} 
-                  value={rawClipStartInput}
-                  onChange={(e) => handleTimeInputChange(e, 0)}
-                  onBlur={(e) => handleTimeInputConfirm(e, 0)}
-                  onFocus={(e) => e.target.select()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.target.blur();
-                    }
-                  }}
-                  autoFocus
-                />
-              ) : (
-                <span className="time-label" onClick={() => setIsEditingStart(true)}>{formatTime(clipStart)}</span>
-              )}
-            </div>
-            <div 
-              className="selected-range" 
-              style={getSelectedRangeStyle()} 
-              onMouseDown={(e) => handleMouseDown('middle', e)} // <-- NEW Panning Handler
-            >
-            </div>
-            <div 
-              className="trimmer-handle right-handle"
-              style={{ left: `${(clipEnd / duration) * 100}%`, zIndex: getHandleZIndex('end')}}
-              onMouseDown={(e) => {e.stopPropagation(); handleMouseDown('end', e)}} // Pass event to handleMouseDown
-            >
-              <div className="handle-grip"></div>
-              { isEditingEnd ? (
-                <input
-                  type="text"
-                  className= { passEndTimeRegexCheck ? ("time-label-edit-end") : ("time-label-edit-end-error")} 
-                  value={rawClipEndInput}
-                  onChange={(e) => handleTimeInputChange(e, 1)}
-                  onBlur={(e) => handleTimeInputConfirm(e, 1)}
-                  onFocus={(e) => e.target.select()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.target.blur();
-                    }
-                  }}
-                  autoFocus
-                />
-              ) : (
-                <span className="time-label" onClick={() => setIsEditingEnd(true)}>{formatTime(clipEnd)}</span>
-              )}
-            </div>
+      {showTimelineZoom && (
+        <TimelineZoom
+          setShowTimelineZoom = {setShowTimelineZoom}
+          clipStart = {clipStart}
+          setClipStart = {setClipStart}
+          clipEnd = {clipEnd}
+          setClipEnd = {setClipEnd}
+        />
+      )}
+      <div className="video-trimmer-container mt-5" style={{ userSelect: 'none' }}>
+        <button
+          id="zoomBtn"
+          className="mx-auto btn btn-primary mb-3"
+          style={{"backgroundColor": "#212529", "color":"#f8f9fa", padding: "0.5rem 1rem"}}
+          onClick={handleTimelineZoom}
+        >
+          Zoom <i className="fa-solid fa-magnifying-glass"></i>
+        </button>
+        <div className="timeline-track" ref={timelineRef} style={{ touchAction: 'none', position: 'relative' }}>
+          <div 
+            className="trimmer-handle left-handle"
+            style={{ left: `${(clipStart / duration) * 100}%`, zIndex: getHandleZIndex('start') }}
+            onPointerDown={(e) => { e.stopPropagation(); handlePointerDown('start', e); }}
+          >
+            <div className="handle-grip"></div>
+            {isEditingStart ? (
+              <input
+                type="text"
+                inputMode="decimal"
+                className={passStartTimeRegexCheck ? "time-label-edit-start" : "time-label-edit-start-error"}
+                value={rawClipStartInput}
+                onChange={(e) => handleTimeInputChange(e, 0)}
+                onBlur={(e) => handleTimeInputConfirm(e, 0)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.target.blur();
+                  }
+                }}
+                autoFocus
+              />
+            ) : (
+              <span className="time-label" onClick={() => setIsEditingStart(true)}>{formatTime(clipStart)}</span>
+            )}
           </div>
-          <div className="duration-info">
-            Selected: {formatTime(clipEnd - clipStart)} / Total: {formatTime(duration)}
+
+          <div className="selected-range" style={getSelectedRangeStyle()} onPointerDown={(e) => handlePointerDown('middle', e)}></div>
+
+          <div 
+            className="trimmer-handle right-handle"
+            style={{ left: `${(clipEnd / duration) * 100}%`, zIndex: getHandleZIndex('end') }}
+            onPointerDown={(e) => { e.stopPropagation(); handlePointerDown('end', e); }}
+          >
+            <div className="handle-grip"></div>
+            {isEditingEnd ? (
+              <input
+                type="text"
+                inputMode="decimal"
+                className={passEndTimeRegexCheck ? "time-label-edit-end" : "time-label-edit-end-error"}
+                value={rawClipEndInput}
+                onChange={(e) => handleTimeInputChange(e, 1)}
+                onBlur={(e) => handleTimeInputConfirm(e, 1)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.target.blur();
+                  }
+                }}
+                autoFocus
+              />
+            ) : (
+              <span className="time-label" onClick={() => setIsEditingEnd(true)}>{formatTime(clipEnd)}</span>
+            )}
           </div>
         </div>
-        <button
-          id="uploadBtn"
-          className="mx-auto btn btn-primary mt-2 mb-2"
-          style={{"backgroundColor": "#f8f9fa", "color":"#000000ff"}}
-          onClick={confirmMediaTrim}
-          >
-            Recognize <i className="fas fa-record-vinyl"></i>
-        </button>
-      </>
-      );
-      }
+
+        <div className="duration-info">
+          Selected: {formatTime(clipEnd - clipStart)} / Total: {formatTime(duration)}
+        </div>
+      </div>
+      <button
+        id="uploadBtn"
+        className="mx-auto btn btn-primary mt-2 mb-2"
+        style={{"backgroundColor": "#f8f9fa", "color":"#000000ff"}}
+        onClick={confirmMediaTrim}
+        >
+          Recognize <i className="fas fa-record-vinyl"></i>
+      </button>
+    </>
+    );
+  }
 
     return (
       <div
@@ -950,7 +700,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
           onClick = {handleCloseButtonClick}
         />
         <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-          <h2 style={{  fontSize: "1.2rem", userSelect: "none" }} className="mt-1" >Select Time Range</h2>
+          <h2 style={{  fontSize: '1.2rem', userSelect: 'none' }} className="mt-1" >Select Time Range</h2>
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
           <video
