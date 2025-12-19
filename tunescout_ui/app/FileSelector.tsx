@@ -3,7 +3,7 @@ import { useRouter } from 'next/navigation';
 import config from './config.json';
 import CloseButton from 'react-bootstrap/CloseButton';
 
-export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle, mainDivRef }) {
+export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle, mainDivRef }: any) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [fileName, setFileName] = useState<string | null>(null); // State to store filename
   const [selectedFile, setSelectedFile] = useState(null);

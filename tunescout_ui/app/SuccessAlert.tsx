@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-export default function SuccessAlert({ message, onClose }) {
+export default function SuccessAlert({ message, onClose }: any) {
   const [visible, setVisible] = useState(true); // controls opacity
   const [mounted, setMounted] = useState(true); // controls render
 

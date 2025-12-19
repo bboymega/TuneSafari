@@ -3,7 +3,7 @@ import { useRouter } from 'next/navigation';
 import config from './config.json'
 import CloseButton from 'react-bootstrap/CloseButton';
 
-export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle, mainDivRef }) {
+export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle, mainDivRef }: any) {
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [cancelled, setCancelled] = useState(false);
