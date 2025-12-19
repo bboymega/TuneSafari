@@ -177,7 +177,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         const handleZoomWheel = (e) => {
           e.preventDefault(); e.stopPropagation();
           const direction = e.deltaY < 0 ? 1 : -1;
-          setZoomLevel((prev) => Math.max(1, Math.min(10, prev + direction * 0.5)));
+          setZoomLevel((prev) => Math.max(1, Math.min(Math.max(5, Math.ceil((duration / 30) / 5) * 5), prev + direction * 0.5)));
         };
         slider.addEventListener('wheel', handleZoomWheel, { passive: false });
         return () => slider.removeEventListener('wheel', handleZoomWheel);
@@ -251,7 +251,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
                   ref={zoomSliderRef}
                   className="form-range custom-zoom-slider"
                   min="1"
-                  max="10"
+                  max= {Math.max(5, Math.ceil((duration / 30) / 5) * 5)}
                   step="0.1"
                   value={zoomLevel}
                   onChange={(e) => setZoomLevel(parseFloat(e.target.value))}

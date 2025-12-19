@@ -19,13 +19,22 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: `${config.appName} - ${config.title}`,
-  description: `${config.description}`
+  description: `${config.description}`,
+  keywords: `${config.keywords}`,
+  icons: {
+    icon: [
+      { url: "/favicon.png", sizes: "16x16" },
+      { url: "/favicon.png", sizes: "32x32" },
+      { url: "/favicon.ico", sizes: "16x16" },
+      { url: "/favicon.ico", sizes: "32x32" },
+    ],
+  },
 };
 
 export const viewport: Viewport = {
   width: 'device-width, shrink-to-fit=no',
   initialScale: 1,
-  themeColor: "#212529"
+  themeColor: `${config.themeColor}`
 }
 
 export default function RootLayout({

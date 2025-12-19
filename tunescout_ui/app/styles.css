@@ -703,7 +703,13 @@ body {
   height: auto;
   min-height: 35rem;
   padding: 15rem 0;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.7) 75%, #000 100%), url("/assets/img/background.svg"), url("/assets/img/background.png"), url("/assets/img/background.jpg"), url("/assets/img/background.jpeg"), url("/assets/img/background.gif");
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.7) 75%, #000 100%),
+  image-set(
+    url("/assets/img/background.svg") type("image/svg+xml"),
+    url("/assets/img/background.png") type("image/png"),
+    url("/assets/img/background.jpg") type("image/jpeg"), 
+    url("/assets/img/background.jpeg") type("image/jpeg")
+    );
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: scroll;
@@ -779,7 +785,13 @@ body {
   height: 170px;
   
   /* Retain other essential styles */
-  background-image: url('/assets/img/logo.svg'), url('/assets/img/logo.png'), url('/assets/img/logo.jpg'), url('/assets/img/logo.jpeg'), url('/assets/img/logo.gif');
+  background-image: image-set(
+    url('/assets/img/logo.svg') type("image/svg+xml"), 
+    url('/assets/img/logo.png') type("image/png"),
+    url('/assets/img/logo.jpg') type("image/jpeg"),
+    url('/assets/img/logo.jpeg') type("image/jpeg"),
+    url('/assets/img/logo.gif') type("image/gif")
+  );
   background-size: cover;
   margin: 0 auto;
   
