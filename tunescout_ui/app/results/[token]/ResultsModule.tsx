@@ -6,7 +6,6 @@ import SuccessAlert from '@/app/SuccessAlert';
 import config from '@/app/config.json';
 import { RecognitionResultItem, RecognitionResponse } from '@/app/page';
 
-
 type ResultsModuleProps = {
   resultsJson: RecognitionResponse;
   setProgress: React.Dispatch<React.SetStateAction<number>>;

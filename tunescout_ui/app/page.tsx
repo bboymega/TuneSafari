@@ -6,7 +6,6 @@ import ErrorAlert from './ErrorAlert';
 import WarningAlert from "./WarningAlert";
 import UploadProgress from "./UploadProgress";
 import config from "./config.json"
-import { FileSelectorProps } from './FileSelector';
 
 export interface RecognitionResultItem {
   blob_sha1: string;
