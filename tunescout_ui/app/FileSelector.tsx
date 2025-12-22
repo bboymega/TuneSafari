@@ -2,23 +2,35 @@ import { useRef, useState, useCallback, useEffect, useLayoutEffect } from "react
 import { useRouter } from 'next/navigation';
 import config from './config.json';
 import CloseButton from 'react-bootstrap/CloseButton';
+import { RecognitionResponse } from './page';
 
-export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle }: any) {
+export interface FileSelectorProps {
+  disabled: boolean;
+  uploadtoAPI: (url: string, data: FormData) => Promise<RecognitionResponse>;
+  setDisabled: (disabled: boolean) => void;
+  setErrorMsg: (msg: string) => void;
+  setIsError: (isError: boolean) => void;
+  setWarnMsg: (msg: string) => void;
+  setIsWarning: (isWarning: boolean) => void;
+  setTitle: (title: string) => void;
+}
+
+export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle }: FileSelectorProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [fileName, setFileName] = useState<string | null>(null); // State to store filename
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showMediaTrimmer, setShowMediaTrimmer ] = useState(false);
   const [isAudioOnly, setIsAudioOnly] = useState(true);
-  const videoRef = useRef<any>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const router = useRouter();
 
   function MediaTrimmer() {
     const [duration, setDuration] = useState(0);
 
-    const handleLoadedMetadata = (e: any) => {
-      const duration = e.target.duration; // Duration in seconds
+    const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+      const duration = (e.target as HTMLVideoElement).duration; // Duration in seconds
       setDuration(duration);
-      if (e.target.videoHeight === 0) {
+      if ((e.target as HTMLVideoElement).videoHeight === 0) {
         setIsAudioOnly(true);
       } else {
         setIsAudioOnly(false);
@@ -32,23 +44,31 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
       setDisabled(false);
     }
 
-    const TimelineZoom = ({ setShowTimelineZoom, clipStart, setClipStart, clipEnd, setClipEnd }: any) => {
+    interface TimelineZoomProps {
+      setShowTimelineZoom: (show: boolean) => void;
+      clipStart: number;
+      setClipStart: React.Dispatch<React.SetStateAction<number>>;
+      clipEnd: number;
+      setClipEnd: React.Dispatch<React.SetStateAction<number>>;
+    }
+
+    const TimelineZoom = ({ setShowTimelineZoom, clipStart, setClipStart, clipEnd, setClipEnd }: TimelineZoomProps) => {
       const [zoomLevel, setZoomLevel] = useState(1);
       const MIN_CLIP_DURATION = 1;
       const MAX_CLIP_DURATION = config.maxDuration;
-      const timelineRef = useRef<any>(null);
+      const timelineRef = useRef<HTMLDivElement>(null);
       const [activeHandle, setActiveHandle] = useState(1);
       const [position, setPosition] = useState({ x: 0, y: 0 });
       const [isDragging, setIsDragging] = useState(false);
-      const viewportRef = useRef<any>(null);
-      const zoomSliderRef = useRef<any>(null);
+      const viewportRef = useRef<HTMLDivElement>(null);
+      const zoomSliderRef = useRef<HTMLInputElement>(null);
       const offset = useRef({ x: 0, y: 0 });
 
-      const draggingHandleRef = useRef<any>(null);
+      const draggingHandleRef = useRef<string>(null);
       const startDragTimeRef = useRef({ clipStart: 0, clipEnd: 0 });
       const startMouseXRef = useRef(0);
 
-      const getHandleZIndex = (handleType: any) => {
+      const getHandleZIndex = (handleType: string) => {
         const startPercent = (clipStart / duration) * 100;
         const ACTIVE_Z = 100;
         const BACK_Z = 20;
@@ -59,7 +79,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         return BACK_Z;
       };
 
-      const formatTime = (seconds: any) => {
+      const formatTime = (seconds: number) => {
         const min = Math.floor(seconds / 60);
         const sec = Math.floor(seconds % 60);
         return `${min}:${sec < 10 ? '0' : ''}${sec}`;
@@ -71,7 +91,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         return { left: `${startPercent}%`, width: `${endPercent - startPercent}%` };
       };
 
-      const handlePointerMove = useCallback((e: any) => {
+      const handlePointerMove = useCallback((e: PointerEvent) => {
         if (!draggingHandleRef.current || !timelineRef.current) return;
         const trackBounds = timelineRef.current.getBoundingClientRect();
         const trackWidth = trackBounds.width;
@@ -126,9 +146,9 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         window.removeEventListener('pointerup', handlePointerUp);
       }, [handlePointerMove]);
 
-      const handlePointerDown = (handleType: any, e: any) => {
+      const handlePointerDown = (handleType: string, e: React.PointerEvent<HTMLDivElement>) => {
         e.stopPropagation();
-        e.target.setPointerCapture?.(e.pointerId);
+        (e.target as Element).setPointerCapture?.(e.pointerId);
         draggingHandleRef.current = handleType;
         startMouseXRef.current = e.clientX;
         startDragTimeRef.current = { clipStart, clipEnd };
@@ -136,7 +156,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         window.addEventListener('pointerup', handlePointerUp);
       };
 
-      const handleWheel = useCallback((e: any) => {
+      const handleWheel = useCallback((e: WheelEvent) => {
         e.preventDefault();
         if (!timelineRef.current) return;
         const trackWidth = timelineRef.current.getBoundingClientRect().width;
@@ -174,7 +194,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
       useEffect(() => {
         const slider = zoomSliderRef.current;
         if (!slider) return;
-        const handleZoomWheel = (e: any) => {
+        const handleZoomWheel = (e: WheelEvent) => {
           e.preventDefault(); e.stopPropagation();
           const direction = e.deltaY < 0 ? 1 : -1;
           setZoomLevel((prev) => Math.max(1, Math.min(Math.max(5, Math.ceil((duration / 30) / 5) * 5), prev + direction * 0.5)));
@@ -183,14 +203,14 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         return () => slider.removeEventListener('wheel', handleZoomWheel);
       }, []);
 
-      const handleDragPointerDown = (e: any) => {
+      const handleDragPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
         setIsDragging(true);
         offset.current = { x: e.clientX - position.x, y: e.clientY - position.y };
-        e.target.setPointerCapture(e.pointerId);
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
       };
 
       useEffect(() => {
-        const handleMove = (e: any) => {
+        const handleMove = (e: PointerEvent) => {
           if (!isDragging) return;
           setPosition({ x: e.clientX - offset.current.x, y: e.clientY - offset.current.y });
         };
@@ -304,14 +324,18 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
       );
     };
 
-    function TrimmerHandler({ handleRecognizeFile }: any) {
+    interface TrimmerHandlerProps {
+      handleRecognizeFile: (startTimeStamp: number, trimmedDuration: number) => Promise<void>;
+    }
+
+    function TrimmerHandler({ handleRecognizeFile }: TrimmerHandlerProps) {
       const MIN_CLIP_DURATION = 1;
       const MAX_CLIP_DURATION = config.maxDuration;
       const initialClipEnd = Math.min(MAX_CLIP_DURATION, duration);
 
       const [clipStart, setClipStart] = useState(0);
       const [clipEnd, setClipEnd] = useState(initialClipEnd);
-      const timelineRef = useRef<any>(null);
+      const timelineRef = useRef<HTMLDivElement>(null);
       const [activeHandle, setActiveHandle] = useState(1);
       const [isEditingStart, setIsEditingStart] = useState(false);
       const [isEditingEnd, setIsEditingEnd] = useState(false);
@@ -321,9 +345,9 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
       const [passEndTimeRegexCheck, setPassEndTimeRegexCheck] = useState(true);
       const [showTimelineZoom, setShowTimelineZoom] = useState(false);
 
-      const draggingHandleRef = useRef<any>(null);
+      const draggingHandleRef = useRef<string>(null);
       const startDragTimeRef = useRef({ clipStart: 0, clipEnd: 0 });
-      const startMouseXRef = useRef<any>(0);
+      const startMouseXRef = useRef<number>(0);
 
       const timeCheckRegex = /^([0-9]{0,5}|[0-9]{0,4}:[0-9]{0,2})$/;
 
@@ -337,7 +361,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         handleRecognizeFile(clipStart, clipDuration);
       };
 
-      const getHandleZIndex = (handleType: any) => {
+      const getHandleZIndex = (handleType: string) => {
         const startPercent = (clipStart / duration) * 100;
         const ACTIVE_Z = 100;
         const BACK_Z = 20;
@@ -354,7 +378,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         return `${min}:${sec < 10 ? '0' : ''}${sec}`;
       };
 
-      const parseTime = (timeString: any) => {
+      const parseTime = (timeString: string) => {
         const cleanedString = timeString.trim();
         if (cleanedString.includes(':')) {
           const parts = cleanedString.split(':');
@@ -375,7 +399,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         }
       };
 
-      const handleTimeInputChange = (e: any, method: any) => {
+      const handleTimeInputChange = (e: React.ChangeEvent<HTMLInputElement>, method: number) => {
         if (method === 0) {
           if (!timeCheckRegex.test(e.target.value)) {
             setPassStartTimeRegexCheck(false);
@@ -393,7 +417,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         }
       };
 
-      const handleTimeInputConfirm = (e:any, method:any) => {
+      const handleTimeInputConfirm = (e:React.ChangeEvent<HTMLInputElement>, method:number) => {
         setPassEndTimeRegexCheck(true);
         let time = parseTime(e.target.value);
         if (time != null) {
@@ -446,7 +470,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         setRawClipEndInput(formatTime(clipEnd));
       };
 
-      const handlePointerMove = useCallback((e:any) => {
+      const handlePointerMove = useCallback((e:PointerEvent) => {
         if (!draggingHandleRef.current || !timelineRef.current) return;
         const trackBounds = timelineRef.current.getBoundingClientRect();
         const trackWidth = trackBounds.width;
@@ -512,8 +536,8 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         window.removeEventListener('pointerup', handlePointerUp);
       }, [handlePointerMove]);
 
-      const handlePointerDown = (handleType:any, e:any) => {
-        e.target.setPointerCapture?.(e.pointerId);
+      const handlePointerDown = (handleType:string, e:React.PointerEvent<HTMLDivElement>) => {
+        (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
         
         draggingHandleRef.current = handleType;
         startMouseXRef.current = e.clientX;
@@ -725,8 +749,8 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (e: any) => {
-    const file = e.target.files[0];
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
 
     if (file) {
       setSelectedFile(file);
@@ -742,7 +766,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
     }
   };
 
-  const handleRecognizeFile = async (startTimeStamp: any, trimmedDuration: any) => {
+  const handleRecognizeFile = async (startTimeStamp: number, trimmedDuration: number) => {
     if (!selectedFile)
     {
       setIsError(true);
@@ -754,12 +778,12 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         setDisabled(true);
         const formData = new FormData();
         formData.append('file', selectedFile);
-        formData.append('start', startTimeStamp);
-        formData.append('duration', trimmedDuration);
+        formData.append('start', startTimeStamp.toString());
+        formData.append('duration', trimmedDuration.toString());
         const url = `${config.apiBaseUrl.replace(/\/$/, '')}/api/recognize`;
         const response = await uploadtoAPI(url, formData);
         if (response) {
-          const resultToken = JSON.parse(response).token;
+          const resultToken = response.token;
           if (resultToken !== undefined && resultToken !== null) {
             router.push(`/results/${resultToken}`);
           }
@@ -773,11 +797,15 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
           }
         }
       }
-      catch (error: any) {
+      catch (error: unknown) {
         setTitle(`${config.appName} - ${config.title}`);
         setIsError(true);
         setIsWarning(false);
-        setErrorMsg(error.toString());
+        if (error instanceof Error) {
+          setErrorMsg(error.message);
+        } else {
+          setErrorMsg(String(error));
+        }
         setSelectedFile(null);
         setFileName(null);
       }

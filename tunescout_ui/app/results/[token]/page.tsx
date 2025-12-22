@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import ErrorAlert from '@/app/ErrorAlert';
 import ResultsModule from './ResultsModule';
 import config from '@/app/config.json';
+import { RecognitionResponse } from '@/app/page';
 
 export default function ResultPage() {
     const fetchCalled = useRef(false);
@@ -13,7 +14,7 @@ export default function ResultPage() {
     const [title, setTitle] = useState(`${config.appName} - Loading Results...`);
     const [errorMsg, setErrorMsg] = useState("");
     const [isError, setIsError] = useState(false);
-    const [resultsJson, setResultsJson] = useState("");
+    const [resultsJson, setResultsJson] = useState<RecognitionResponse>({ results: [], status: "", token: "" });
     const [isResultsFetched, setIsResultsFetched] = useState(false);
     const currentYear = new Date().getFullYear();
     const [progress, setProgress] = useState(20);

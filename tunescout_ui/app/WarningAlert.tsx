@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 
-export default function WarningAlert({ message, onClose }: any) {
+interface WarningAlertProps {
+  message: string;
+  onClose: () => void;
+}
+
+
+export default function WarningAlert({ message, onClose }: WarningAlertProps) {
   const [visible, setVisible] = useState(true); // controls opacity
   const [mounted, setMounted] = useState(true); // controls render
 

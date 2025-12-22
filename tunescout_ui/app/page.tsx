@@ -6,6 +6,26 @@ import ErrorAlert from './ErrorAlert';
 import WarningAlert from "./WarningAlert";
 import UploadProgress from "./UploadProgress";
 import config from "./config.json"
+import { FileSelectorProps } from './FileSelector';
+
+export interface RecognitionResultItem {
+  blob_sha1: string;
+  fingerprinted_confidence: number;
+  fingerprinted_hashes_in_db: number;
+  hashes_matched_in_input: number;
+  input_confidence: number;
+  input_total_hashes: number;
+  offset: number;
+  offset_seconds: number;
+  song_id: string;
+  song_name: string;
+}
+
+export interface RecognitionResponse {
+  results: RecognitionResultItem[];
+  status: string;
+  token: string;
+}
 
 export default function index() {
   const [title, setTitle] = useState(`${config.appName} - ${config.title}`);
@@ -54,7 +74,7 @@ export default function index() {
     )
   }
     
-  function uploadtoAPI(url: any, formData: any) {
+  function uploadtoAPI(url: string, formData: FormData): Promise<RecognitionResponse> {
     return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url, true);
@@ -63,7 +83,7 @@ export default function index() {
 
     xhr.onload = function () {
       if (xhr.status === 200) {
-        resolve(xhr.responseText); // Resolve with the response text
+        resolve(JSON.parse(xhr.responseText)); // Resolve with the response text
         setUploadState('Uploading...');
         setShowProgress(true);
         setProgress(20);

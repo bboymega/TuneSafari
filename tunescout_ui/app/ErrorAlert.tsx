@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 
-export default function ErrorAlert({ message, onClose }: any) {
+interface ErrorAlertProps {
+  message: string;
+  onClose: () => void;
+}
+
+export default function ErrorAlert({ message, onClose }: ErrorAlertProps) {
   const [visible, setVisible] = useState(true); // controls opacity
   const [mounted, setMounted] = useState(true); // controls render
 

@@ -2,8 +2,21 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from 'next/navigation';
 import config from './config.json'
 import CloseButton from 'react-bootstrap/CloseButton';
+import { RecognitionResponse } from './page';
 
-export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle, mainDivRef }: any) {
+interface AudioRecorderProps {
+  disabled: boolean;
+  uploadtoAPI: (url: string, formData: FormData) => Promise<RecognitionResponse>;
+  setDisabled: (disabled: boolean) => void;
+  setErrorMsg: (msg: string) => void;
+  setIsError: (isError: boolean) => void;
+  setWarnMsg: (msg: string) => void;
+  setIsWarning: (isWarning: boolean) => void;
+  setTitle: (title: string) => void;
+  mainDivRef: React.RefObject<HTMLDivElement | null>;
+}
+
+export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setErrorMsg, setIsError, setWarnMsg, setIsWarning, setTitle, mainDivRef }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [cancelled, setCancelled] = useState(false);
@@ -16,7 +29,7 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
     setSeconds(0);
     setCancelled(true);
     setTitle(`${config.appName} - ${config.title}`);
-    mainDivRef.current.style.userSelect = "auto";
+    mainDivRef.current!.style.userSelect = "auto";
     if (activeStreamRef.current) {
         // Stop every track (audio and video, if present)
         activeStreamRef.current.getTracks().forEach(track => {
@@ -31,7 +44,7 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
   }
 
   useEffect(() => { // Count recording seconds, max 10 seconds.
-    let interval: any;
+    let interval: ReturnType<typeof setInterval> | undefined = undefined;
     if (isRecording) {
       interval = setInterval(() => {
         setSeconds(prev => {
@@ -46,9 +59,9 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
       // Stop and reset counting if recording stops
       clearInterval(interval);
       setSeconds(0);
-      mainDivRef.current.style.userSelect = "auto";
+      mainDivRef.current!.style.userSelect = "auto";
     }
-    return () => clearInterval(interval);
+    return () => {if (interval) clearInterval(interval)};
   }, [isRecording]);
 
   function formatTime(seconds: number) { // Format seconds to mm:ss
@@ -60,7 +73,7 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
   const startRecording = async () => {
     // Request microphone permission first
     try {
-      mainDivRef.current.style.userSelect = "none";
+      mainDivRef.current!.style.userSelect = "none";
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           channelCount: 1, 
@@ -103,7 +116,7 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
       setIsError(true);
       setIsRecording(false);
       setDisabled(false);
-      mainDivRef.current.style.userSelect = "auto";
+      mainDivRef.current!.style.userSelect = "auto";
     }
   };
 
@@ -142,7 +155,7 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
       const url = `${config.apiBaseUrl.replace(/\/$/, '')}/api/recognize`;
       const response = await uploadtoAPI(url, formData);
       if (response) {
-        const resultToken = JSON.parse(response).token;
+        const resultToken = response.token;
         if (resultToken !== undefined && resultToken !== null) {
           router.push(`/results/${resultToken}`);
         }
@@ -153,11 +166,15 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
           setWarnMsg('Warning: No results were found');
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setTitle(`${config.appName} - ${config.title}`);
       setIsError(true);
       setIsWarning(false);
-      setErrorMsg(error.toString());
+      if (error instanceof Error) {
+        setErrorMsg(error.message); 
+      } else {
+        setErrorMsg(String(error));
+      }
     }
     finally {
       setDisabled(false);
