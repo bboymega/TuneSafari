@@ -438,7 +438,18 @@
                 reject(new Error("Network Error"));
             });
 
-            xhr.addEventListener("abort", () => reject(new Error("Upload Aborted")));
+            xhr.addEventListener("abort", () => {
+                fileListItem.style.background = "rgba(248, 215, 218, 1)";
+                const percentLabel = fileListItem.querySelector('.progress-text');
+                const fileSizeLabel = fileListItem.querySelector('.filesize-text');
+                if (percentLabel) {
+                    percentLabel.hidden = false;
+                    fileSizeLabel.style.color = "rgb(220, 53, 69)";
+                    percentLabel.style.color = "rgb(220, 53, 69)";
+                    percentLabel.textContent = ` • Upload aborted`;
+                }
+                reject(new Error("Upload Aborted"))
+            });
 
             xhr.open("POST", url);
             const formData = new FormData();
