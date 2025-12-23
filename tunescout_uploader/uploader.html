@@ -107,6 +107,10 @@
                         document.getElementById("uploadFiles").innerHTML = `Upload & Fingerprint <i class="fa-solid fa-upload">`;
                         fileListContainer.hidden = true;
                     }
+                    if (fileList.children.length === 0) {
+                        document.getElementById("uploadFiles").innerHTML = `Upload & Fingerprint <i class="fa-solid fa-upload">`;
+                        fileListContainer.hidden = true;
+                    }
                 });
 
                 fileList.appendChild(li);
@@ -114,7 +118,7 @@
 
             document.getElementById('fileInput').files = allFiles.files;
 
-            if (fileList.length === 0) {
+            if (fileList.children.length === 0) {
                 document.getElementById("uploadFiles").innerHTML = `Upload & Fingerprint <i class="fa-solid fa-upload">`;
                 fileListContainer.hidden = true;
             }
