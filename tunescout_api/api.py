@@ -86,6 +86,32 @@ def recognize_api():
                 "message": "No file part in the request"
             }), 400
 
+        with open(config_file, 'r') as jsonFile:
+            json_config = json.load(jsonFile)
+            if "recognizing" in json_config:
+                recognizing_config = json_config["recognizing"]
+                if "max_file_size_mb" in recognizing_config:
+                    if isinstance(recognizing_config["max_file_size_mb"], str):
+                        max_file_size_mb = int(recognizing_config["max_file_size_mb"])
+                        if request.content_length and request.content_length > max_file_size_mb * 1024 * 1024:
+                            sys.stderr.write("\033[31m" + f"{datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')} {request.remote_addr} \"ERROR: File exceeds the size limit {max_file_size_mb * 1024 * 1024}, received bytes {request.content_length}\"" + "\033[0m\n")
+                            return jsonify({
+                                "status": "error",
+                                "message": f"File exceeds the {max_file_size_mb} MB limit",
+                                "limit_bytes": f"{max_file_size_mb * 1024 * 1024}",
+                                "received_bytes": f"{request.content_length}"
+                            }), 413
+                    else:
+                        max_file_size_mb = recognizing_config["max_file_size_mb"]
+                        if request.content_length and request.content_length > max_file_size_mb * 1024 * 1024:
+                            sys.stderr.write("\033[31m" + f"{datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')} {request.remote_addr} \"ERROR: File exceeds the size limit {max_file_size_mb * 1024 * 1024}, received bytes {request.content_length}\"" + "\033[0m\n")
+                            return jsonify({
+                                "status": "error",
+                                "message": f"File exceeds the {max_file_size_mb} MB limit",
+                                "limit_bytes": f"{max_file_size_mb * 1024 * 1024}",
+                                "received_bytes": f"{request.content_length}"
+                            }), 413
+
         blob = request.files['file'].read()
 
         # convert audio to standard wav before sampling
@@ -349,6 +375,13 @@ def conflict_data(error):
         "status": "error",
         "message": "Conflict"
     }), 409
+
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    return jsonify({
+        "status": "error",
+        "message": "Request entity too large"
+    }), 413
 
 @app.errorhandler(500)
 def internal_server_error(error):

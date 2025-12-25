@@ -4,7 +4,8 @@
     "token": "12345"
   },
   "recognizing": {
-    "max_duration": 10
+    "max_duration": 10,
+    "max_file_size_mb": 150
   },
   "allowed_origin": ["http://127.0.0.1:3000", "http://172.16.241.129:3000", "http://172.16.241.129"],
   "instances": [
