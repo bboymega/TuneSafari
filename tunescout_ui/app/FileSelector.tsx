@@ -245,7 +245,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
           style={{
             position: "fixed", top: `calc(50% + ${position.y}px)`, left: `calc(50% + ${position.x}px)`,
             transform: "translate(-50%, -50%)", backgroundColor: "rgba(0,0,0,1)", color: "#fff",
-            padding: "10px 20px", borderRadius: "5px", zIndex: 9999, touchAction: "none", userSelect: "none", width: "clamp(0px, 95vw, 400px)"
+            padding: "10px 20px", borderRadius: "5px", zIndex: 9999, touchAction: "none", userSelect: "none", width: "clamp(0px, 95svw, 400px)"
           }}
         >
           <div
@@ -723,7 +723,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
           textAlign: "center",
           zIndex: 9999,
           margin: "0 auto",
-          minWidth: "clamp(0px, 90vw, 360px)"
+          minWidth: "clamp(0px, 90svw, 360px)"
         }}
       >
         <CloseButton 
@@ -754,7 +754,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
               ref={videoRef as React.RefObject<HTMLVideoElement>}
               src={URL.createObjectURL(selectedFile!)}
               controls
-              style={{ height: 'auto', maxHeight: 'min(50vh, 480px)', objectFit: 'contain', maxWidth: '100%' }}
+              style={{ height: 'auto', maxHeight: 'min(50svh, 480px)', objectFit: 'contain', maxWidth: '100%' }}
               onLoadedMetadata={handleLoadedMetadata}
             />
           )}

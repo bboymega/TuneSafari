@@ -116,7 +116,7 @@ h5, h2, h1 {
 }
 
 h1 {
-  font-size: calc(1.375rem + 1.5vw);
+  font-size: calc(1.375rem + 1.5svw);
 }
 @media (min-width: 1200px) {
   h1 {
@@ -125,7 +125,7 @@ h1 {
 }
 
 h2 {
-  font-size: calc(1.325rem + 0.9vw);
+  font-size: calc(1.325rem + 0.9svw);
 }
 @media (min-width: 1200px) {
   h2 {
@@ -748,7 +748,7 @@ body {
 }
 @media (min-width: 992px) {
   .masthead {
-    height: 100vh;
+    height: 100svh;
     padding: 0;
   }
   .masthead h1 {

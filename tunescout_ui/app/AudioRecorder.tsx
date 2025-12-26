@@ -201,8 +201,8 @@ export default function AudioRecorder({ disabled, uploadtoAPI, setDisabled, setE
             textAlign: "center",
             zIndex: 9999,
             cursor: "pointer",
-            maxWidth: "clamp(0px, 90vw, 360px)",
-            maxHeight: '90vh'
+            maxWidth: "clamp(0px, 90svw, 360px)",
+            maxHeight: '90svh'
           }}
         >
           <CloseButton 
