@@ -8,6 +8,8 @@ import redis
 import json
 import pickle
 import uuid
+import random
+from datetime import datetime
 from typing import Dict, List, Tuple
 from dejavu.base_classes.base_database import BaseDatabase
 from mysql.connector.errors import DatabaseError
@@ -31,22 +33,26 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
             user = redis_conf.get("user")
             password = redis_conf.get("password")
             port = redis_conf.get("port", 6379)
+            self.prefix = redis_conf.get("prefix", "TuneScout")
             db_index = self.redis_db_index
 
-            self.redis_pool = redis.ConnectionPool(
-                host=host,
-                port=port,
-                username=user,
-                password=password,
-                db=db_index,
-                socket_timeout=2.0,
-                socket_connect_timeout=2.0,
-                retry_on_timeout=True
-            )
-            self.redis_client = redis.Redis(connection_pool=self.redis_pool)
+            redis_kwargs = {
+                "host": host,
+                "port": port,
+                "db": db_index,
+                "socket_timeout": 2.0,
+                "socket_connect_timeout": 2.0,
+                "retry_on_timeout": True
+            }
+            if user:
+                redis_kwargs["username"] = user
+            if password:
+                redis_kwargs["password"] = password
+                
+            self.redis_pool = redis.ConnectionPool(**redis_kwargs)
             self.redis_client.ping()
         except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
-            sys.stderr.write(f"\033[33mRedis Connection Warning: {e}. Falling back to ClickHouse query-only mode.\033[0m\n")
+            sys.stderr.write(f"\033[33m{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} TuneScout \"WARNING: Redis Connection Warning: {e}. Falling back to SQL only mode for recognition\"\033[0m\n")
             self.redis_client = None
 
     def before_fork(self) -> None:
@@ -244,28 +250,31 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
         for index in range(0, len(values), batch_size):
             current_batch = values[index: index + batch_size]
             
-            # 2. Check Redis Cache
-            pipe = self.redis_client.pipeline()
-            for hsh in current_batch:
-                pipe.get(hsh.upper())
-            redis_responses = pipe.execute()
-            
+            # Check Redis Cache
             hit_blocks = []
             cache_misses = []
+            if self.redis_client:
+                pipe = self.redis_client.pipeline()
+                for hsh in current_batch:
+                    pipe.get(f"{self.prefix}:{hsh.upper()}")
+                redis_responses = pipe.execute()
 
-            for hsh, raw_data in zip(current_batch, redis_responses):
-                if raw_data:
-                    m_list = pickle.loads(raw_data)
-                    if m_list:
-                        # Convert to numpy array [sid, offset]
-                        m = np.array(m_list, dtype=object) 
-                        # Add the hash column back to match SQL output shape: [hash, sid, offset]
-                        h_col = np.full((m.shape[0], 1), hsh)
-                        hit_blocks.append(np.hstack((h_col, m)))
-                else:
+                for hsh, raw_data in zip(current_batch, redis_responses):
+                    if raw_data:
+                        m_list = pickle.loads(raw_data)
+                        if m_list:
+                            # Convert to numpy array [sid, offset]
+                            m = np.array(m_list, dtype=object) 
+                            # Add the hash column back to match SQL output shape: [hash, sid, offset]
+                            h_col = np.full((m.shape[0], 1), hsh)
+                            hit_blocks.append(np.hstack((h_col, m)))
+                    else:
+                        cache_misses.append(hsh)
+            else:
+                for hsh in current_batch:
                     cache_misses.append(hsh)
 
-            # 3. Handle Cache Misses with MySQL
+            # Handle Cache Misses with MySQL
             sql_block = np.empty((0, 3), dtype=object)
             if cache_misses:
                 with self.cursor() as cur:
@@ -282,12 +291,13 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
                         sorted_arr = sql_block[sort_idx]
                         unq_h, indices = np.unique(sorted_arr[:, 0], return_index=True)
                         groups = np.split(sorted_arr, indices[1:])
-                        
-                        write_pipe = self.redis_client.pipeline()
-                        for h_key, group in zip(unq_h, groups):
-                            # Cache [sid, offset] only. Expiration: 24h
-                            write_pipe.setex(h_key.upper(), 86400, pickle.dumps(group[:, [1, 2]].tolist()))
-                        write_pipe.execute()
+                        if self.redis_client:
+                            write_pipe = self.redis_client.pipeline()
+                            for h_key, group in zip(unq_h, groups):
+                                # Cache [sid, offset] only. Expiration: 24h
+                                redis_key = f"{self.prefix}:{h_key.upper()}"
+                                write_pipe.setex(redis_key, 86400, pickle.dumps(group[:, [1, 2]].tolist()))
+                            write_pipe.execute()
 
             # 4. Merge Cache & DB results
             all_blocks = [sql_block] + hit_blocks if hit_blocks else [sql_block]
@@ -447,7 +457,7 @@ class MySQLDatabase(Query):
     IN_MATCH = f"UNHEX(%s)"
 
     def __init__(self, **options):
-        redis_db_index = options.pop("redis_db_index", 0)
+        redis_db_index = options.pop("redis_db_index", random.randint(0, 15))
         super().__init__(redis_db_index=redis_db_index)
         self.cursor = cursor_factory(**options)
         self._options = options

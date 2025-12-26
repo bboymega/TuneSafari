@@ -15,6 +15,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import ffmpeg
 import sys
 import re
+import random
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -43,21 +44,41 @@ app = create_app()
 with open('config.json') as f:
     config_data = json.load(f)
 
-raw_recognize_limit = config_data.get("recognizing", {}).get("rate_limit")
+raw_recognize_limit = config_data.get("rate_limit", {}).get("recognizing")
 active_recognize_limit = raw_recognize_limit if raw_recognize_limit else "10 per second"
 
-raw_fetch_limit = config_data.get("fetching_results", {}).get("rate_limit")
-active_fetch_limit = raw_fetch_limit if raw_fetch_limit else "10 per second"
+raw_fetch_limit = config_data.get("rate_limit", {}).get("fetching_results")
+active_fetch_limit = raw_fetch_limit if raw_fetch_limit else "50 per second"
 
-raw_fingerprint_limit = config_data.get("fingerprinting", {}).get("rate_limit")
+raw_fingerprint_limit = config_data.get("rate_limit", {}).get("fingerprinting")
 active_fingerprint_limit = raw_fingerprint_limit if raw_fingerprint_limit else "10 per second"
 
-limiter = Limiter(
-    get_remote_address,
-    app=app,
-#    storage_uri=f"sqlite:///{db_path}",
-#    storage_options={"engine_kwargs": {"connect_args": {"check_same_thread": False}}}
-)
+try:
+    with open(config_file, 'r') as f:
+        config_data = json.load(f)
+
+    redis_conf = config_data.get("redis", {})
+    host = redis_conf.get("host", "127.0.0.1")
+    user = redis_conf.get("user", "")
+    password = redis_conf.get("password", "")
+    port = redis_conf.get("port", 6379)
+    prefix = redis_conf.get("prefix", "TuneScout")
+    db_index = config_data.get("rate_limit", {}).get("redis_db_index", random.randint(0, 15))
+    print(f"redis://{user}:{password}@{host}:{port}/{db_index}")
+    print(prefix)
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        storage_uri=f"redis://{user}:{password}@{host}:{port}/{db_index}",
+        storage_options={"key_prefix": prefix}
+    )
+except Exception as e:
+    sys.stderr.write(f"\033[33m{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} TuneScout \"WARNING: Redis Connection Warning: {e}. Falling back to in-memory mode for rate limiting\"\033[0m\n")
+    limiter = Limiter(
+        key_func=get_remote_address,
+        app=app,
+        storage_uri="memory://"
+    )
 
 def init():
     try:
