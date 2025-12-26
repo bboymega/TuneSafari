@@ -781,8 +781,8 @@ body {
 /* --- Media Query for Mobile/Smaller Screens --- */
 #logo {
   /* Set the larger size for desktops */
-  width: 220px;
-  height: 170px;
+  width: 100%;
+  height: 210px;
   
   /* Retain other essential styles */
   background-image: image-set(
@@ -792,30 +792,14 @@ body {
     url('/assets/img/logo.jpeg') type("image/jpeg"),
     url('/assets/img/logo.gif') type("image/gif")
   );
-  background-size: cover;
+  background-size: contain;
   margin: 0 auto;
+  background-repeat: no-repeat;
+  background-position: center;
   
   /* Additional styles from your HTML for centering/spacing */
   /* This is optional, but good practice to keep styling consistent */
   /* ... */
-}
-
-/* This rule applies when the screen width is 767px or less */
-@media (max-width: 767px) {
-  #logo {
-    /* Set the smaller size for mobile */
-    width: 180px; /* Example: make it 120px wide */
-    height: 140px; /* Example: make it 100px tall */
-  }
-}
-
-/* Optional: Add a query for a medium size (e.g., tablet landscape) */
-@media (min-width: 768px) and (max-width: 1024px) {
-  #logo {
-    /* Set an intermediate size for tablets */
-    width: 180px;
-    height: 140px;
-  }
 }
 
 /* --- Trimmer Container and Base --- */

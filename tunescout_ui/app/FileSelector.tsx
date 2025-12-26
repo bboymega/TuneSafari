@@ -21,7 +21,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showMediaTrimmer, setShowMediaTrimmer ] = useState(false);
   const [isAudioOnly, setIsAudioOnly] = useState(true);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
   const router = useRouter();
 
   // Media trimmer interface
@@ -29,14 +29,9 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
     const [duration, setDuration] = useState(0);
 
     // Obtain media duration
-    const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement>) => {
-      const duration = (e.target as HTMLVideoElement).duration; // Duration in seconds
+    const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement | HTMLAudioElement>) => {
+      const duration = (e.target as HTMLVideoElement | HTMLAudioElement).duration; // Duration in seconds
       setDuration(duration);
-      if ((e.target as HTMLVideoElement).videoHeight === 0) {
-        setIsAudioOnly(true);
-      } else {
-        setIsAudioOnly(false);
-      }
     };
 
     // Close the window when close button is clicked
@@ -628,7 +623,7 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
           setClipEnd = {setClipEnd}
         />
       )}
-      <div className="video-trimmer-container mt-5">
+      <div className="video-trimmer-container mt-4">
         <button
           id="zoomBtn"
           className="mx-auto btn btn-primary mb-3"
@@ -745,18 +740,24 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
         <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
           <h2 style={{  fontSize: '1.2rem', userSelect: 'none' }} className="mt-1" >Select Time Range</h2>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-          <video
-            ref={videoRef}
-            src={URL.createObjectURL(selectedFile!)}
-            controls
-            className="mt-2"
-            style= {{
-              maxWidth: '100%',
-              maxHeight: isAudioOnly ? '60px' : '480px',
-            }} // Max size, responsive
-            onLoadedMetadata={handleLoadedMetadata}
-          />
+        <div className="mt-4" style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+          {isAudioOnly ? (
+            <audio
+              ref={videoRef as React.RefObject<HTMLAudioElement>}
+              src={URL.createObjectURL(selectedFile!)}
+              style={{ maxWidth: '100%' }}
+              controls
+              onLoadedMetadata={handleLoadedMetadata}
+            />
+          ) : (
+            <video
+              ref={videoRef as React.RefObject<HTMLVideoElement>}
+              src={URL.createObjectURL(selectedFile!)}
+              controls
+              style={{ maxHeight: '480px', maxWidth: '100%' }}
+              onLoadedMetadata={handleLoadedMetadata}
+            />
+          )}
         </div>
         <TrimmerHandler
           handleRecognizeFile = {handleRecognizeFile}
@@ -773,12 +774,18 @@ export default function FileSelector ({ disabled, uploadtoAPI, setDisabled, setE
 
     if (file) {
       setSelectedFile(file);
+      const isVideo = file.type.startsWith('video/');
+
+      if (isVideo) setIsAudioOnly(false);
+      else setIsAudioOnly(true);
+
       setFileName(file.name);
       setShowMediaTrimmer(true);
       setDisabled(true);
     } else {
       setSelectedFile(null);
       setFileName(null);
+      setIsAudioOnly(true);
     }
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
