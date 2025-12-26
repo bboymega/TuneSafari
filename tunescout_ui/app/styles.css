@@ -933,7 +933,7 @@ body {
     width: 60px;
     z-index: 150;
     /* Undo the handle's transform so the label stays centered */
-    transform: translateX(-10%); 
+    transform: translateX(-45%); 
 }
 
 .time-label-edit-start-error {
@@ -948,7 +948,7 @@ body {
     width: 60px;
     z-index: 150;
     /* Undo the handle's transform so the label stays centered */
-    transform: translateX(-10%); 
+    transform: translateX(-45%); 
 }
 
 .time-label-edit-end {
@@ -963,7 +963,7 @@ body {
     width: 60px;
     z-index: 150;
     /* Undo the handle's transform so the label stays centered */
-    transform: translateX(10%); 
+    transform: translateX(45%); 
 }
 
 .time-label-edit-end-error {
@@ -978,17 +978,17 @@ body {
     width: 60px;
     z-index: 150;
     /* Undo the handle's transform so the label stays centered */
-    transform: translateX(10%); 
+    transform: translateX(45%); 
 }
 
 /* Adjust the left handle's label position */
 .left-handle .time-label {
-    transform: translateX(-10%); 
+    transform: translateX(-45%); 
 }
 
 /* Adjust the right handle's label position */
 .right-handle .time-label {
-    transform: translateX(10%); 
+    transform: translateX(45%); 
 }
 
 /* --- Duration Info --- */
