@@ -64,8 +64,6 @@ try:
     port = redis_conf.get("port", 6379)
     prefix = redis_conf.get("prefix", "TuneScout")
     db_index = config_data.get("rate_limit", {}).get("redis_db_index", random.randint(0, 15))
-    print(f"redis://{user}:{password}@{host}:{port}/{db_index}")
-    print(prefix)
     limiter = Limiter(
         get_remote_address,
         app=app,

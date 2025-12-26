@@ -3,11 +3,13 @@ The core algorithm of this project is based on the [worldveil/dejavu project](ht
 ## Modifications
 - Adding **multi-processing** support for improved performance.
 - Supporting **result storage**.
+- Supporting **Redis caching**.
 - Supporting **Clickhouse** instances for rapid queries and high-speed data handling for large-scale deployments.
 - Supporting **multi database instance** for scalability.
 - Supporting **resilient database instance handling** to utilize remaining available instances if some configured databases are temporarily down or unreachable.
 - Supporting **universal multimedia format** to handle a wide range of multimedia formats.
 - Exposing core music recognition and fingerprinting functionality as **API endpoints**.
+- Supporting **rate limiting**.
 
 ### MIT License
 
