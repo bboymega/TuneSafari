@@ -91,7 +91,7 @@ Headers:
 | ------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `{token}` | The required authorization header for submission. It should be formatted as: `Authorization: Bearer {token}`. |
 
-- **Example**: `Authorization: Bearer 12345`                                                                                 |
+- **Example**: `Authorization: Bearer 12345`
 
 
 Parameters:
