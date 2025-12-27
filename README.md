@@ -25,6 +25,27 @@ This project is under development, core algorithm based on [worldveil/dejavu](ht
 
 - **Token authentication and write protection for audio fingerprinting requests**: Ensures that only authorized users can add audio fingerprint data to the database, with built-in write protection to maintain data integrity.
 
+
+## API Deployment
+
+- **1. Clone the Repository**
+```
+git clone https://github.com/bboymega/TuneScout
+cd tunescout_api
+```
+
+- **2. Environment Setup**
+```
+python3 -m venv venv
+source venv/bin/activate
+pip3 install -r requirements.txt
+```
+
+- **3.Run with Gunicorn**
+```
+gunicorn --bind 0.0.0.0:8080 -w 4 api:app --timeout 600
+```
+
 ## API Endpoints
 
 ### /api/recognize
