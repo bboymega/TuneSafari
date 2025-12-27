@@ -19,6 +19,8 @@ This project is under development, core algorithm based on [worldveil/dejavu](ht
 
 - **Universal Multimedia Format Support**: Automatically converts submitted audio or video data to a standardized WAV format [44.1 kHz (configurable via `DEFAULT_FS`), 16-bit] before processing to handle a wide range of multimedia formats.
 
+- **Media Trimming**: Supports recognizing selected portions of the submitted media file.
+
 - **REST API**: Allows audio data recognition and fingerprinting through URL submission.
 
 - **Rate Limiting**: Configurable settings to manage the rate of incoming requests for recognizing, fetching results and fingerprinting independently.

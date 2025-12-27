@@ -8,6 +8,7 @@ The core algorithm of this project is based on the [worldveil/dejavu project](ht
 - Supporting **multi database instance** for scalability.
 - Supporting **resilient database instance handling** to utilize remaining available instances if some configured databases are temporarily down or unreachable.
 - Supporting **universal multimedia format** to handle a wide range of multimedia formats.
+- Supporting **Media Trimming**.
 - Exposing core music recognition and fingerprinting functionality as **API endpoints**.
 - Supporting **rate limiting**.
 

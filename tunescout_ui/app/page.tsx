@@ -199,7 +199,7 @@ return (
                 id="logo"
                 className="mx-auto"
               />
-              <h2 className="mx-auto mb-4">{config.appLabel}</h2>
+              <h2 className="mx-auto mt-2 mb-3">{config.appLabel}</h2>
               <ExternalLink/>
               <h2 className="mx-auto mt-2 mb-3">Record an audio</h2>
               <AudioRecorder
