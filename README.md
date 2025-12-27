@@ -44,10 +44,10 @@ Parameters:
 
 Example with Parameters for the Python `requests` Library:
 
-"""
+```
 files = {'file': (f.name, f, mime_type)}
 data = {'start': '0', 'duration': '10'} # optional
-"""
+```
 
 Response:
 
@@ -102,10 +102,10 @@ Parameters:
 
 - Example with Parameters for the Python `requests` Library: 
 
-"""
+```
 header = { 'Authorization': f'Bearer 12345' }
 files = {'file': (f.name, f, mime_type)}
-"""
+```
 - **Alternative Method**: You can also use the `tunescout_uploader` to upload audio samples for fingerprinting.
 
 Response:
