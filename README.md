@@ -35,7 +35,7 @@ This project is composed of three main components: **tunescout_api**, **tunescou
 
 The backend API for handling music recognition, result storage and audio fingerprinting. Built with Python/Flask.
 
-### tunescout_ui
+### [tunescout_ui](./tunescout_ui/README.md)
 
 The web application serving as the user interface (UI) for the project. Built with Next.js/React.
 

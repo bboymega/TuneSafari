@@ -1,21 +1,17 @@
 ## API Deployment
 
-- **1. Clone the Repository**
+Run the following command to configure the systemd service. You can modify the variables in the URL to match your environment.
 ```
-git clone https://github.com/bboymega/TuneScout
-cd tunescout_api
-```
+curl -sL "https://<worker_url>/install-api-systemd? \
+service_name=tunescout_api& \
+daemon_user=www-data& \
+daemon_group=www-data& \
+installation_path=/var/www/tunescout_api& \
+gunicorn_workers=10& \
+gunicorn_timeout=600& \
+gunicorn_bind=127.0.0.1:50080& \
+systemd_path=/etc/systemd/system/" | sudo bash
 
-- **2. Environment Setup**
-```
-python3 -m venv venv
-source venv/bin/activate
-pip3 install -r requirements.txt
-```
-
-- **3.Run with Gunicorn**
-```
-gunicorn --bind 0.0.0.0:8080 -w 4 api:app --timeout 600
 ```
 
 ## API Endpoints
