@@ -39,8 +39,6 @@ The backend API for handling music recognition, result storage and audio fingerp
 
 The web application serving as the user interface (UI) for the project. Built with Next.js/React.
 
-Documentation Status: In progress.
-
 ### tunescout_uploader
 
 The uploader module for handling the upload of audio data. Uploaded data is processed by the backend API with audio fingerprints stored in the database. This module can be run locally and is built with HTML/JavaScript.
