@@ -12,7 +12,7 @@ Prepare your `config.json`. Create your configuration file based on the example 
 
 Spin up a container with the following command:
 ```
-docker run -d -p 8000:80 -v /path/to/your/config.json:/app/config.json bboymega/tunescout_ui:v1.0.0
+docker run -d -p 3000:80 -v /path/to/your/config.json:/app/config.json bboymega/tunescout_ui:v1.0.0
 ```
 
 **FOR PRODUCTION**: Set up a reverse proxy using Apache2 or Nginx to expose the endpoint securely through HTTPS.
