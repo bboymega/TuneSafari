@@ -13,7 +13,7 @@ Spin up a container with the following command:
 docker run -d -p 8000:80 -v /path/to/your/config.json:/app/config.json bboymega/tunescout_api:v1.0.0
 ```
 
-**FOR PRODUCTION**: Set up a reverse proxy using Apache2 or Nginx to expose the endpoint securely through HTTPS.
+**FOR PRODUCTION**: Set up a reverse proxy using Apache2 or Nginx to expose the endpoints securely through HTTPS.
 
 
 ## API Endpoints
