@@ -8,7 +8,7 @@
     "max_file_size_mb": 150
   },
   "redis": {
-    "host": "127.0.0.1",
+    "host": "172.17.0.1",
     "user": "dejavu",
     "password": "dejavu",
     "prefix": "dejavu",
@@ -20,11 +20,11 @@
     "fingerprinting": "10 per second",
     "redis_db_index": 0
   },
-  "allowed_origin": ["http://127.0.0.1:3000", "http://172.16.241.129:3000", "http://172.16.241.129"],
+  "allowed_origin": ["http://127.0.0.1:3000", "*"],
   "instances": [
     {
       "database": {
-        "host": "127.0.0.1",
+        "host": "172.17.0.1",
         "user": "dejavu",
         "password": "dejavu",
         "database": "dejavu0",
@@ -35,7 +35,7 @@
     },
     {
       "database": {
-        "host": "127.0.0.1",
+        "host": "172.17.0.1",
         "user": "dejavu",
         "password": "dejavu",
         "database": "dejavu1",
@@ -46,7 +46,7 @@
     },
     {
       "database": {
-        "host": "127.0.0.1",
+        "host": "172.17.0.1",
         "user": "dejavu",
         "password": "dejavu",
         "database": "dejavu2",
@@ -59,7 +59,7 @@
   "results": [
     {
       "database": {
-        "host": "127.0.0.1",
+        "host": "172.17.0.1",
         "user": "dejavu",
         "password": "dejavu",
         "database": "result0",
@@ -69,7 +69,7 @@
     },
     {
       "database": {
-        "host": "127.0.0.1",
+        "host": "172.17.0.1",
         "user": "dejavu",
         "password": "dejavu",
         "database": "result1",
@@ -79,7 +79,7 @@
     },
     {
       "database": {
-        "host": "127.0.0.1",
+        "host": "172.17.0.1",
         "user": "dejavu",
         "password": "dejavu",
         "database": "result2",

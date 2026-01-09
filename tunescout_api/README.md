@@ -1,18 +1,20 @@
 ## API Deployment
 
-Run the following command to configure the systemd service. You can modify the variables in the URL to match your environment.
-```
-curl -sL "https://<worker_url>/install-api-systemd? \
-service_name=tunescout_api& \
-daemon_user=www-data& \
-daemon_group=www-data& \
-installation_path=/var/www/tunescout_api& \
-gunicorn_workers=10& \
-gunicorn_timeout=600& \
-gunicorn_bind=127.0.0.1:50080& \
-systemd_path=/etc/systemd/system/" | sudo bash
+You can use Docker to easily deploy the TuneScout API server.
 
+Simply pull the docker image:
 ```
+docker pull bboymega/tunescout_api:v1.0.0
+```
+Prepare your `config.json`. Create your configuration file based on the example provided at the end of this readme.
+
+Spin up a container with the following command:
+```
+docker run -d -p 8000:80 -v /path/to/your/config.json:/app/config.json bboymega/tunescout_api:v1.0.0
+```
+
+**FOR PRODUCTION**: Set up a reverse proxy using Apache2 or Nginx to expose the endpoint securely through HTTPS.
+
 
 ## API Endpoints
 
@@ -208,7 +210,7 @@ Configuring the distributed set of result storage database instances. Each insta
     "max_file_size_mb": 150
   },
   "redis": {
-    "host": "127.0.0.1",
+    "host": "172.17.0.1",
     "user": "dejavu",
     "password": "dejavu",
     "prefix": "dejavu",
@@ -220,11 +222,11 @@ Configuring the distributed set of result storage database instances. Each insta
     "fingerprinting": "10 per second",
     "redis_db_index": 0
   },
-  "allowed_origin": ["https://example.com"],
+  "allowed_origin": ["https://example.com", "*"],
   "instances": [
     {
       "database": {
-        "host": "127.0.0.1",
+        "host": "172.17.0.1",
         "user": "dejavu",
         "password": "dejavu",
         "database": "dejavu0",
@@ -235,7 +237,7 @@ Configuring the distributed set of result storage database instances. Each insta
     },
     {
       "database": {
-        "host": "127.0.0.1",
+        "host": "172.17.0.1",
         "user": "dejavu",
         "password": "dejavu",
         "database": "dejavu1",
@@ -248,7 +250,7 @@ Configuring the distributed set of result storage database instances. Each insta
   "results": [
     {
       "database": {
-        "host": "127.0.0.1",
+        "host": "172.17.0.1",
         "user": "dejavu",
         "password": "dejavu",
         "database": "result0",
@@ -258,7 +260,7 @@ Configuring the distributed set of result storage database instances. Each insta
     },
     {
       "database": {
-        "host": "127.0.0.1",
+        "host": "172.17.0.1",
         "user": "dejavu",
         "password": "dejavu",
         "database": "result1",
