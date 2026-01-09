@@ -27,7 +27,7 @@ This project is under development, core algorithm based on [worldveil/dejavu](ht
 
 - **Token authentication and write protection for audio fingerprinting requests**: Ensures that only authorized users can add audio fingerprint data to the database, with built-in write protection to maintain data integrity.
 
-## Documentation
+## Documentation & Deployment
 
 This project is composed of three main components: **tunescout_api**, **tunescout_ui**, and **tunescout_uploader**. Below you will find a brief overview of each part, with links to their respective detailed documentation.
 
