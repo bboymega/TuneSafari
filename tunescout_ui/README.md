@@ -1,6 +1,4 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
-## User Interface Deployment
+## TuneScout User Interface Deployment
 
 You can use Docker to easily deploy the TuneScout UI Service.
 

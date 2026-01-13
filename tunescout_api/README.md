@@ -1,4 +1,4 @@
-## API Deployment
+## TuneScout API Deployment
 
 You can use Docker to easily deploy the TuneScout API server.
 
