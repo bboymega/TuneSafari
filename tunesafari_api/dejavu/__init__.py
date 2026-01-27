@@ -219,7 +219,7 @@ class Dejavu:
         return [], file_hash # Placeholder for actual worker logic
 
     @staticmethod
-    def get_blob_fingerprints(blob, song_name, remote_addr, print_output: bool = False):
+    def get_blob_fingerprints(blob, song_name, remote_addr, print_output: bool = True):
         channels, fs, file_hash = decoder.read(blob)
         fingerprints = set()
         channel_amount = len(channels)
