@@ -18,7 +18,7 @@ from dejavu.config.settings import (DEFAULT_FS, DEFAULT_OVERLAP_RATIO,
                                     FINGERPRINTED_CONFIDENCE,
                                     FINGERPRINTED_HASHES, HASHES_MATCHED,
                                     INPUT_CONFIDENCE, INPUT_HASHES, OFFSET,
-                                    OFFSET_SECS, SONG_ID, SONG_NAME, TOPN)
+                                    OFFSET_SECS, SONG_ID, SONG_NAME, TOPN, DEFAULT_FAN_VALUE)
 from dejavu.logic.fingerprint import fingerprint
 
 class Dejavu:
@@ -115,7 +115,7 @@ class Dejavu:
                 peak_list.append((f, t))
         return sorted(peak_list, key=lambda x: x[1])
 
-    def _generate_hashes(self, peaks, fan_out=3) -> List[Tuple[str, int]]:
+    def _generate_hashes(self, peaks, fan_out=DEFAULT_FAN_VALUE) -> List[Tuple[str, int]]:
         fingerprints = []
         for i in range(len(peaks) - (fan_out + 1)):
             for j in range(1, fan_out + 1):
