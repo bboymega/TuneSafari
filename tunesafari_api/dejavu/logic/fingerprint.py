@@ -60,46 +60,59 @@ def get_2D_peaks(arr2D: np.ndarray, amp_min: int = DEFAULT_AMP_MIN) -> List[Tupl
     filter_idxs = np.where(amps > amp_min)
     return sorted(zip(freqs[filter_idxs], times[filter_idxs]), key=itemgetter(1))
 
-def generate_triplet_hashes(peaks: List[Tuple[int, int]], fan_value: int = DEFAULT_FAN_VALUE):
+def generate_triplet_hashes(peaks, fan_value=DEFAULT_FAN_VALUE):
     """
-    Triplet Logic:
-    Instead of (f1, f2, dt), we use (time_ratio, f2-f1, f3-f1).
+    Vectorized version of triplet hashing.
+    peaks: List of (f, t) tuples or a NumPy array of shape (N, 2)
     """
+    peaks = np.array(peaks)
     n = len(peaks)
-    hashes = []
+    if n < 3:
+        return []
+
+    f = peaks[:, 0]
+    t = peaks[:, 1]
     
-    for i in range(n):
-        # We look forward for two more points to form a triplet
-        for j in range(1, fan_value):
-            if (i + j) < n:
-                for k in range(j + 1, fan_value + 1):
-                    if (i + k) < n:
-                        p1 = peaks[i]   # Anchor
-                        p2 = peaks[i+j] # Point 2
-                        p3 = peaks[i+k] # Point 3
+    all_hashes = []
 
-                        # f = frequency bin index, t = time frame index
-                        f1, t1 = p1
-                        f2, t2 = p2
-                        f3, t3 = p3
+    # Iterate through offsets j and k within the fan_value range
+    # Since fan_value is small, this 'semi-vectorized' approach is 
+    # significantly faster than a triple nested loop.
+    for j in range(1, fan_value):
+        for k in range(j + 1, fan_value + 1):
+            # Indices for triplets: Anchor (i), Point 2 (i+j), Point 3 (i+k)
+            # We slice the arrays so they align perfectly
+            idx_i = np.arange(0, n - k)
+            idx_j = idx_i + j
+            idx_k = idx_i + k
 
-                        dt21 = t2 - t1
-                        dt31 = t3 - t1
-                        
-                        if dt31 == 0: continue # Prevent division by zero
+            # Frequency components
+            f1, f2, f3 = f[idx_i], f[idx_j], f[idx_k]
+            # Time components
+            t1, t2, t3 = t[idx_i], t[idx_j], t[idx_k]
 
-                        # --- THE INVARIANTS ---
-                        # 1. Time Ratio: Invariant to speed changes
-                        t_ratio = dt21 / dt31
-                        
-                        # 2. Frequency Deltas: Invariant to pitch shifts in CQT
-                        df21 = f2 - f1
-                        df31 = f3 - f1
+            # Calculate Deltas
+            dt21 = t2 - t1
+            dt31 = t3 - t1
+            df21 = f2 - f1
+            df31 = f3 - f1
 
-                        # Generate Hash
-                        h_str = f"{t_ratio:.3f}|{df21}|{df31}"
-                        h = hashlib.sha1(h_str.encode("utf-8")).hexdigest()[:FINGERPRINT_REDUCTION]
-                        
-                        hashes.append((h, int(t1)))
-                        
-    return hashes
+            # Mask to avoid division by zero and handle valid time deltas
+            mask = dt31 != 0
+            if not np.any(mask):
+                continue
+
+            # Calculate Invariants
+            t_ratio = dt21[mask] / dt31[mask]
+            v_df21 = df21[mask]
+            v_df31 = df31[mask]
+            v_t1 = t1[mask]
+
+            # Vectorized Hash Generation
+            # We use a vectorized string formatting approach
+            for tr, d21, d31, time in zip(t_ratio, v_df21, v_df31, v_t1):
+                h_str = f"{tr:.3f}|{d21}|{d31}"
+                h = hashlib.sha1(h_str.encode("utf-8")).hexdigest()[:FINGERPRINT_REDUCTION]
+                all_hashes.append((h, int(time)))
+
+    return all_hashes
