@@ -64,7 +64,7 @@ def recognize_all(blob):
         dup = False
         # De-duplication of results
         for item in songs:
-            if item[FIELD_BLOB_SHA1].hex().lower() == result['results'][0][FIELD_BLOB_SHA1].hex().lower():
+            if item[FIELD_BLOB_SHA1].lower() == result['results'][0][FIELD_BLOB_SHA1].lower():
                 dup = True
                 break
         if not dup:
