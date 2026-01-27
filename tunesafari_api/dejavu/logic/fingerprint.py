@@ -15,7 +15,7 @@ from dejavu.config.settings import (CONNECTIVITY_MASK, DEFAULT_AMP_MIN,
                                     DEFAULT_OVERLAP_RATIO, DEFAULT_WINDOW_SIZE,
                                     FINGERPRINT_REDUCTION, MAX_HASH_TIME_DELTA,
                                     MIN_HASH_TIME_DELTA,
-                                    PEAK_NEIGHBORHOOD_SIZE, PEAK_SORT, MIN_TIME_DELTA, MAX_TIME_DELTA)
+                                    PEAK_NEIGHBORHOOD_SIZE, PEAK_SORT, MIN_TIME_DELTA, MAX_TIME_DELTA, N_BINS, BINS_PER_OCTAVE, HOP_LENGTH, MIN_NOTE)
 
 
 def fingerprint(channel_samples: np.ndarray,
@@ -29,10 +29,10 @@ def fingerprint(channel_samples: np.ndarray,
 
     C = np.abs(librosa.cqt(channel_samples.astype(float), 
                          sr=Fs, 
-                         hop_length=512, 
-                         fmin=librosa.note_to_hz('C1'), 
-                         n_bins=84,      # Reduced from 168
-                         bins_per_octave=12)) # Standard 12-tone scale
+                         hop_length=HOP_LENGTH, 
+                         fmin=librosa.note_to_hz(MIN_NOTE), 
+                         n_bins=N_BINS,      # Reduced from 168
+                         bins_per_octave=BINS_PER_OCTAVE)) # Standard 12-tone scale
 
     # 2. Power to Decibels
     arr2D = librosa.amplitude_to_db(C, ref=np.max)

@@ -3,7 +3,7 @@
 # Configuration file path for database instances and authenticating fingerprinting requests
 CONFIG_FILE = "config.json"
 
-# DEJAVU JSON RESPONSE
+# JSON RESPONSE
 SONG_ID = "song_id"
 SONG_NAME = 'song_name'
 RESULTS = 'results'
@@ -148,3 +148,9 @@ TOPN = 3
 MIN_TIME_DELTA = 0.5
 MAX_TIME_DELTA = 3.0
 BUCKET_SIZE = 10
+
+# Binning Config
+N_BINS = 96  # Number of bins
+BINS_PER_OCTAVE = 12
+HOP_LENGTH = 512 # Fidelity of fingerprinting samples. Default: 512 samples per 44100 samples per second for standarized audio input.
+MIN_NOTE = 'C1' # C1 key of the piano

@@ -19,7 +19,7 @@ from dejavu.config.settings import (DEFAULT_FS, DEFAULT_OVERLAP_RATIO,
                                     FINGERPRINTED_CONFIDENCE,
                                     FINGERPRINTED_HASHES, HASHES_MATCHED,
                                     INPUT_CONFIDENCE, INPUT_HASHES, OFFSET,
-                                    OFFSET_SECS, SONG_ID, SONG_NAME, TOPN, DEFAULT_FAN_VALUE, DEFAULT_AMP_MIN, BUCKET_SIZE)
+                                    OFFSET_SECS, SONG_ID, SONG_NAME, TOPN, DEFAULT_FAN_VALUE, DEFAULT_AMP_MIN, BUCKET_SIZE, N_BINS, BINS_PER_OCTAVE, HOP_LENGTH, MIN_NOTE)
 from dejavu.logic.fingerprint import fingerprint
 
 class Dejavu:
@@ -85,9 +85,9 @@ class Dejavu:
         samples_float = samples.astype(float)
 
         # 1. CQT - Set to 84 bins (7 octaves) to stay safely below Nyquist limit
-        cqt = np.abs(librosa.cqt(samples_float, sr=Fs, hop_length=512, 
-                                 fmin=librosa.note_to_hz('C1'), 
-                                 n_bins=84, bins_per_octave=12))
+        cqt = np.abs(librosa.cqt(samples_float, sr=Fs, hop_length=HOP_LENGTH, 
+                                 fmin=librosa.note_to_hz(MIN_NOTE), 
+                                 n_bins=N_BINS, bins_per_octave=BINS_PER_OCTAVE))
         
         # 2. Convert to DB - Essential for peak finding consistency
         # This makes the loudest peak 0dB and the rest negative.
@@ -232,16 +232,16 @@ class Dejavu:
             total_hashes_in_db = song.get(FIELD_TOTAL_HASHES) or 1
 
             songs_result.append({
-                "song_id": str(song_id),
-                "song_name": song.get(SONG_NAME),
-                "input_total_hashes": queried_hashes,
-                "fingerprinted_hashes_in_db": total_hashes_in_db,
-                "hashes_matched_in_input": hashes_matched_count,
-                "input_confidence": hashes_matched_count / queried_hashes,
-                "fingerprinted_confidence": hashes_matched_count / total_hashes_in_db,
-                "offset": max(0, int(offset)),
-                "offset_seconds": max(0, nseconds),
-                "blob_sha1": blob_sha1_str.lower()
+                SONG_ID: str(song_id),
+                SONG_NAME: song.get(SONG_NAME),
+                INPUT_HASHES: queried_hashes,
+                FINGERPRINTED_HASHES: total_hashes_in_db,
+                HASHES_MATCHED: hashes_matched_count,
+                INPUT_CONFIDENCE: hashes_matched_count / queried_hashes,
+                FINGERPRINTED_CONFIDENCE: hashes_matched_count / total_hashes_in_db,
+                OFFSET: max(0, int(offset)),
+                OFFSET_SECS: max(0, nseconds),
+                FIELD_BLOB_SHA1: blob_sha1_str.lower()
             })
 
         return songs_result
