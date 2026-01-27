@@ -5,6 +5,8 @@ This project is under development, core algorithm based on [worldveil/dejavu](ht
 
 ## Features
 
+- **Temporal Resilience**: Robustness Against Speed and Tempo Variation, suited for recognizing DJ mixes, live performances, or audio with intentional distortions.
+
 - **Multi-processing**: Enables faster processing times by distributing requests across multiple processing threads or cores and multiple database instances.
 
 - **Result Storage Support**: Supports storing processed results in databases for easy retrieval, analysis, and re-use.
