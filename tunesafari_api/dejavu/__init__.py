@@ -197,8 +197,8 @@ class Dejavu:
                 HASHES_MATCHED: hashes_matched_count, # Use the actual count from the histogram
                 INPUT_CONFIDENCE: hashes_matched_count / queried_hashes,
                 FINGERPRINTED_CONFIDENCE: hashes_matched_count / (song.get(FIELD_TOTAL_HASHES) or 1),
-                OFFSET: int(offset),
-                OFFSET_SECS: nseconds,
+                OFFSET: max(0, int(offset)),
+                OFFSET_SECS: max(0, nseconds),
                 FIELD_BLOB_SHA1: blob_sha1.lower()
             })
 
