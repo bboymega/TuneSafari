@@ -143,3 +143,7 @@ FINGERPRINT_REDUCTION = 20
 
 # Number of results being returned for file recognition
 TOPN = 3
+
+# Configuration for time irrelevance binning (handle time stretch)
+MIN_TIME_DELTA = 0.5
+MAX_TIME_DELTA = 3.0

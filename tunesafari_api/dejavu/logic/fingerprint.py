@@ -15,7 +15,7 @@ from dejavu.config.settings import (CONNECTIVITY_MASK, DEFAULT_AMP_MIN,
                                     DEFAULT_OVERLAP_RATIO, DEFAULT_WINDOW_SIZE,
                                     FINGERPRINT_REDUCTION, MAX_HASH_TIME_DELTA,
                                     MIN_HASH_TIME_DELTA,
-                                    PEAK_NEIGHBORHOOD_SIZE, PEAK_SORT)
+                                    PEAK_NEIGHBORHOOD_SIZE, PEAK_SORT, MIN_TIME_DELTA, MAX_TIME_DELTA)
 
 
 def fingerprint(channel_samples: np.ndarray,
@@ -60,59 +60,71 @@ def get_2D_peaks(arr2D: np.ndarray, amp_min: int = DEFAULT_AMP_MIN) -> List[Tupl
     filter_idxs = np.where(amps > amp_min)
     return sorted(zip(freqs[filter_idxs], times[filter_idxs]), key=itemgetter(1))
 
-def generate_triplet_hashes(peaks, fan_value=DEFAULT_FAN_VALUE):
-    """
-    Vectorized version of triplet hashing.
-    peaks: List of (f, t) tuples or a NumPy array of shape (N, 2)
-    """
+def generate_triplet_hashes(peaks, fan_value=DEFAULT_FAN_VALUE, 
+                            min_delta_t=MIN_TIME_DELTA, max_delta_t=MAX_TIME_DELTA):
     peaks = np.array(peaks)
     n = len(peaks)
     if n < 3:
         return []
 
-    f = peaks[:, 0]
+    f = peaks[:, 0].astype(np.int32)
     t = peaks[:, 1]
+
+    # 1. Broad-stroke neighbor discovery
+    # Create a distance matrix for time: (N, fan_value + 1)
+    # We look at the next 'fan_value + offset' points to find valid window candidates
+    max_search = fan_value * 2 
+    idx = np.arange(n)
+    
+    # Efficiently gather neighbors using a sliding window view
+    # padding ensures we don't out-of-bounds
+    padded_t = np.pad(t, (0, max_search), constant_values=np.inf)
+    padded_f = np.pad(f, (0, max_search), constant_values=0)
     
     all_hashes = []
 
-    # Iterate through offsets j and k within the fan_value range
-    # Since fan_value is small, this 'semi-vectorized' approach is 
-    # significantly faster than a triple nested loop.
-    for j in range(1, fan_value):
-        for k in range(j + 1, fan_value + 1):
-            # Indices for triplets: Anchor (i), Point 2 (i+j), Point 3 (i+k)
-            # We slice the arrays so they align perfectly
-            idx_i = np.arange(0, n - k)
-            idx_j = idx_i + j
-            idx_k = idx_i + k
+    for i in range(n):
+        # Look ahead at a block of potential candidates
+        t_neighbors = padded_t[i+1 : i + max_search + 1]
+        f_neighbors = padded_f[i+1 : i + max_search + 1]
+        
+        # 2. Apply Time Window Mask
+        # Find indices within [min_delta_t, max_delta_t]
+        dt = t_neighbors - t[i]
+        mask = (dt >= min_delta_t) & (dt <= max_delta_t)
+        
+        valid_indices = np.where(mask)[0][:fan_value]
+        num_valid = len(valid_indices)
+        
+        if num_valid < 2:
+            continue
 
-            # Frequency components
-            f1, f2, f3 = f[idx_i], f[idx_j], f[idx_k]
-            # Time components
-            t1, t2, t3 = t[idx_i], t[idx_j], t[idx_k]
+        # Extract only valid candidate data
+        v_dt = dt[valid_indices]
+        v_f = f_neighbors[valid_indices]
+        v_df = v_f - f[i]
 
-            # Calculate Deltas
-            dt21 = t2 - t1
-            dt31 = t3 - t1
-            df21 = f2 - f1
-            df31 = f3 - f1
-
-            # Mask to avoid division by zero and handle valid time deltas
-            mask = dt31 != 0
-            if not np.any(mask):
-                continue
-
-            # Calculate Invariants
-            t_ratio = dt21[mask] / dt31[mask]
-            v_df21 = df21[mask]
-            v_df31 = df31[mask]
-            v_t1 = t1[mask]
-
-            # Vectorized Hash Generation
-            # We use a vectorized string formatting approach
-            for tr, d21, d31, time in zip(t_ratio, v_df21, v_df31, v_t1):
-                h_str = f"{tr:.3f}|{d21}|{d31}"
-                h = hashlib.sha1(h_str.encode("utf-8")).hexdigest()[:FINGERPRINT_REDUCTION]
-                all_hashes.append((h, int(time)))
+        # 3. Vectorized Triplet Formation for Anchor i
+        # We generate all pairs (j, k) from the valid candidates
+        # Combinations: j from 0 to num_valid-1, k from j+1 to num_valid
+        for j in range(num_valid):
+            # Point 2 data
+            dt21 = v_dt[j]
+            df21 = v_df[j]
+            
+            # Points 3 data (all points after j)
+            dt31 = v_dt[j+1:]
+            df31 = v_df[j+1:]
+            
+            # Vectorized calculation of ratios and hashes for all k in this j
+            t_ratios = (dt21 / dt31 * 100).astype(np.int32)
+            
+            # Bit-pack the hashes
+            # Packs: Ratio (high bits), df21, df31 (low bits)
+            hashes = (t_ratios << 16) | ((df21 + 100) << 8) | (df31 + 100)
+            
+            # Append as (hash, anchor_time)
+            anchor_time = int(t[i])
+            all_hashes.extend([(int(h), anchor_time) for h in hashes])
 
     return all_hashes

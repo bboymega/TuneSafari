@@ -18,7 +18,7 @@ from dejavu.config.settings import (DEFAULT_FS, DEFAULT_OVERLAP_RATIO,
                                     FINGERPRINTED_CONFIDENCE,
                                     FINGERPRINTED_HASHES, HASHES_MATCHED,
                                     INPUT_CONFIDENCE, INPUT_HASHES, OFFSET,
-                                    OFFSET_SECS, SONG_ID, SONG_NAME, TOPN, DEFAULT_FAN_VALUE)
+                                    OFFSET_SECS, SONG_ID, SONG_NAME, TOPN, DEFAULT_FAN_VALUE, DEFAULT_AMP_MIN)
 from dejavu.logic.fingerprint import fingerprint
 
 class Dejavu:
@@ -92,15 +92,15 @@ class Dejavu:
         # This makes the loudest peak 0dB and the rest negative.
         spectrogram_db = librosa.amplitude_to_db(cqt, ref=np.max)
         
-        # 3. Peak Finding (using -50dB threshold)
-        peaks = self._extract_peaks(spectrogram_db, threshold=-50)
+        # 3. Peak Finding (using -50dB threshold at DEFAULT_AMP_MIN)
+        peaks = self._extract_peaks(spectrogram_db, threshold=DEFAULT_AMP_MIN)
         
         # 4. Hash Triplets
         hashes = self._generate_hashes(peaks)
         
         return hashes, time() - t
 
-    def _extract_peaks(self, spectrogram, threshold=0.1) -> List[Tuple[int, int]]:
+    def _extract_peaks(self, spectrogram, threshold=DEFAULT_AMP_MIN) -> List[Tuple[int, int]]:
         local_max = maximum_filter(spectrogram, size=(10, 10)) == spectrogram
         background = (spectrogram == 0)
         eroded_background = binary_erosion(background, structure=np.ones((10, 10)))
@@ -116,27 +116,46 @@ class Dejavu:
         return sorted(peak_list, key=lambda x: x[1])
 
     def _generate_hashes(self, peaks, fan_out=DEFAULT_FAN_VALUE) -> List[Tuple[str, int]]:
-        fingerprints = []
-        for i in range(len(peaks) - (fan_out + 1)):
-            for j in range(1, fan_out + 1):
-                for k in range(j + 1, fan_out + 2):
-                    p1, p2, p3 = peaks[i], peaks[i+j], peaks[i+k]
-                    
-                    # Time Ratio (Speed Invariant)
-                    dt21 = p2[1] - p1[1]
-                    dt31 = p3[1] - p1[1]
-                    if dt31 <= 0: continue
-                    time_ratio = dt21 / dt31
+        peaks = np.array(peaks)
+        n = len(peaks)
+        if n < 3:
+            return []
 
-                    # Frequency Delta (Pitch Invariant)
-                    df21 = p2[0] - p1[0]
-                    df31 = p3[0] - p1[0]
+        f = peaks[:, 0].astype(np.int32)
+        t = peaks[:, 1]
+        
+        all_hashes = []
 
-                    # Create a 20-char SHA1 hash of the triplet geometry
-                    h_str = f"{time_ratio:.3f}|{df21}|{df31}"
-                    h = hashlib.sha1(h_str.encode()).hexdigest()[:20]
-                    fingerprints.append((h, p1[1])) # (hash, offset)
-        return fingerprints
+        for j in range(1, fan_out + 1):
+            for k in range(j + 1, fan_out + 2):
+                idx_limit = n - k
+                
+                f1, f2, f3 = f[:idx_limit], f[j:j+idx_limit], f[k:k+idx_limit]
+                t1, t2, t3 = t[:idx_limit], t[j:j+idx_limit], t[k:k+idx_limit]
+
+                dt21 = t2 - t1
+                dt31 = t3 - t1
+                df21 = f2 - f1
+                df31 = f3 - f1
+
+                valid = dt31 > 0
+                if not np.any(valid):
+                    continue
+
+                # 1. Calculate the Ratio (Quantized to 3 decimals)
+                # We multiply by 1000 to keep 3 decimal places of precision as an int
+                t_ratio = (dt21[valid] / dt31[valid] * 1000).astype(np.int32)
+                
+                v_df21 = df21[valid]
+                v_df31 = df31[valid]
+                v_t1 = t1[valid].astype(np.int32)
+
+                # 2. Bit-pack into an integer
+                packed_hashes = (t_ratio << 16) | ((v_df21 + 100) << 8) | (v_df31 + 100)
+
+                all_hashes.extend(zip(packed_hashes.tolist(), v_t1.tolist()))
+
+        return all_hashes
 
     def find_matches(self, hashes: List[Tuple[str, int]]) -> Tuple[List[Tuple[int, int]], Dict[str, int], float]:
         """
@@ -210,13 +229,17 @@ class Dejavu:
 
     @staticmethod
     def _fingerprint_worker(blob, song_name, remote_addr):
-        # We instantiate a temporary Dejavu object to use the instance methods
-        # or simply point to a standalone function. 
-        # For this compatibility, let's assume we call a revised get_blob_fingerprints
+        # Use the decoder to get the audio data
         channels, fs, file_hash = decoder.read(blob)
-        # Assuming you've moved the logic to a place accessible here
-        # For brevity, you would call the generate_fingerprints logic here
-        return [], file_hash # Placeholder for actual worker logic
+        
+        all_hashes = []
+        for channel in channels:
+            # Note: You should move the CQT logic to a standalone function 
+            # in logic/fingerprint.py so this worker can call it easily.
+            hashes = fingerprint(channel, Fs=fs) 
+            all_hashes.extend(hashes)
+            
+        return all_hashes, file_hash
 
     @staticmethod
     def get_blob_fingerprints(blob, song_name, remote_addr, print_output: bool = True):

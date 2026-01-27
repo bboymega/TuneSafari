@@ -234,7 +234,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
         # 1. Prepare Data for Query (Mapping input hashes to their offsets)
         mapper = {}
         for hsh, offset in hashes:
-            hsh_upper = hsh.upper() 
+            hsh_upper = hsh 
             if hsh_upper not in mapper:
                 mapper[hsh_upper] = []
             mapper[hsh_upper].append(offset)
@@ -256,7 +256,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
             if self.redis_client:
                 pipe = self.redis_client.pipeline()
                 for hsh in current_batch:
-                    pipe.get(f"{self.prefix}:{hsh.upper()}")
+                    pipe.get(f"{self.prefix}:{hsh}")
                 redis_responses = pipe.execute()
 
                 for hsh, raw_data in zip(current_batch, redis_responses):
@@ -295,7 +295,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
                             write_pipe = self.redis_client.pipeline()
                             for h_key, group in zip(unq_h, groups):
                                 # Cache [sid, offset] only. Expiration: 24h
-                                redis_key = f"{self.prefix}:{h_key.upper()}"
+                                redis_key = f"{self.prefix}:{h_key}"
                                 write_pipe.setex(redis_key, 86400, pickle.dumps(group[:, [1, 2]].tolist()))
                             write_pipe.execute()
 
@@ -368,7 +368,7 @@ class MySQLDatabase(Query):
 
     CREATE_FINGERPRINTS_TABLE = f"""
         CREATE TABLE IF NOT EXISTS `{FINGERPRINTS_TABLENAME}` (
-            `{FIELD_HASH}` BINARY(10) NOT NULL
+            `{FIELD_HASH}` BIGINT UNSIGNED NOT NULL
         ,   `{FIELD_SONG_ID}` VARCHAR(36) NOT NULL
         ,   `{FIELD_OFFSET}` INT UNSIGNED NOT NULL
         ,   `date_created` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP

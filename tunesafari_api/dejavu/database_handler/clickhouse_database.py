@@ -288,7 +288,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
             if self.redis_client:
                 pipe = self.redis_client.pipeline()
                 for hsh in current_batch:
-                    pipe.get(f"{self.prefix}:{hsh.lower()}")
+                    pipe.get(f"{self.prefix}:{hsh}")
                 redis_responses = pipe.execute()
 
                 for hsh, raw_data in zip(current_batch, redis_responses):
@@ -314,7 +314,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
                 SELECT_MULTIPLE = f"""
                     SELECT `{FIELD_HASH}`, `{FIELD_SONG_ID}`, `{FIELD_OFFSET}`
                     FROM `{FINGERPRINTS_TABLENAME}`
-                    WHERE `{FIELD_HASH}` IN ({', '.join([repr(h.lower()) for h in cache_misses])});
+                    WHERE `{FIELD_HASH}` IN ({', '.join([repr(h) for h in cache_misses])});
                 """
                 sql_results = self.client.execute(SELECT_MULTIPLE)
                 
@@ -330,7 +330,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
                         write_pipe = self.redis_client.pipeline()
                         for h_key, group in zip(unq_h, groups):
                             # Cache only [sid, offset]
-                            redis_key = f"{self.prefix}:{h_key.lower()}"
+                            redis_key = f"{self.prefix}:{h_key}"
                             write_pipe.setex(redis_key, 86400, pickle.dumps(group[:, [1, 2]].tolist()))
                         write_pipe.execute()
 
@@ -411,7 +411,7 @@ class ClickhouseDatabase(Query):
     
     CREATE_FINGERPRINTS_TABLE = f"""
         CREATE TABLE IF NOT EXISTS `{FINGERPRINTS_TABLENAME}` (
-        `{FIELD_HASH}` FixedString(25) NOT NULL,
+        `{FIELD_HASH}` UInt64 NOT NULL,
         `{FIELD_SONG_ID}` UUID NOT NULL,
         `{FIELD_OFFSET}` UInt32 NOT NULL,
         `date_created` DateTime DEFAULT now(),
