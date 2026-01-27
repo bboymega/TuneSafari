@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Dict, List, Tuple
 import librosa
 import numpy as np
+from collections import defaultdict
 from scipy.ndimage import maximum_filter, binary_erosion
 import dejavu.logic.decoder as decoder
 from dejavu.base_classes.base_database import get_database
@@ -18,7 +19,7 @@ from dejavu.config.settings import (DEFAULT_FS, DEFAULT_OVERLAP_RATIO,
                                     FINGERPRINTED_CONFIDENCE,
                                     FINGERPRINTED_HASHES, HASHES_MATCHED,
                                     INPUT_CONFIDENCE, INPUT_HASHES, OFFSET,
-                                    OFFSET_SECS, SONG_ID, SONG_NAME, TOPN, DEFAULT_FAN_VALUE, DEFAULT_AMP_MIN)
+                                    OFFSET_SECS, SONG_ID, SONG_NAME, TOPN, DEFAULT_FAN_VALUE, DEFAULT_AMP_MIN, BUCKET_SIZE)
 from dejavu.logic.fingerprint import fingerprint
 
 class Dejavu:
@@ -157,68 +158,90 @@ class Dejavu:
 
         return all_hashes
 
-    def find_matches(self, hashes: List[Tuple[str, int]]) -> Tuple[List[Tuple[int, int]], Dict[str, int], float]:
+    def find_matches(self, hashes: List[Tuple[int, int]]) -> Tuple[List[Tuple[any, int, int]], Dict[any, int], float]:
         """
         Finds the corresponding matches on the fingerprinted audios for the given hashes.
 
-        :param hashes: list of tuples for hashes and their corresponding offsets
-        :return: a tuple containing the matches found against the db, a dictionary which counts the different
-         hashes matched for each song (with the song id as key), and the time that the query took.
-
+        :param hashes: list of tuples for hashes and their corresponding offsets (from query)
+        :return: 
+            - matches: List of (song_id, db_offset, query_offset)
+            - dedup_hashes: Dictionary of {song_id: total_match_count}
+            - query_time: Float representing seconds taken
         """
         t = time()
+        # self.db.return_matches now returns the 3-tuple (sid, db_off, q_off)
+        # plus the dedup_hashes dictionary.
         matches, dedup_hashes = self.db.return_matches(hashes)
         query_time = time() - t
         return matches, dedup_hashes, query_time
 
-    def align_matches(self, matches: List[Tuple[int, int]], dedup_hashes: Dict[str, int], queried_hashes: int,
+    def align_matches(self, matches: List[Tuple[int, int, int]], queried_hashes: int,
                   topn: int = TOPN) -> List[Dict[str, any]]:
         """
-        Handles the binary/string SHA1 issue and 
-        calculates timing based on CQT hop_length.
+        Optimized for Pitch/Tempo changes. Uses histogram binning to find 
+        the strongest alignment peak for each song.
         """
-        # 1. Group by song_id and time-offset
-        sorted_matches = sorted(matches, key=lambda m: (m[0], m[1]))
-        counts = [(*key, len(list(group))) for key, group in groupby(sorted_matches, key=lambda m: (m[0], m[1]))]
-        
-        # 2. Find the best offset (histogram peak) for each song
-        songs_matches = sorted(
-            [max(list(group), key=lambda g: g[2]) for key, group in groupby(counts, key=lambda count: count[0])],
-            key=lambda count: count[2], reverse=True
-        )
+        if not matches:
+            return []
 
+        # 1. Group by song_id and apply Histogram Binning
+        # matches structure: (song_id, db_offset, query_offset)
+        # diff = db_offset - query_offset
+        song_diffs = defaultdict(list)
+        for sid, db_off, q_off in matches:
+            song_diffs[sid].append(db_off - q_off)
+
+        # 2. Find the strongest peak per song
+        # bucket_size=5 allows for ~58ms of drift (at 512 hop, 44100 Hz)
+        bucket_size = BUCKET_SIZE
+        songs_matches = []
+
+        for song_id, diffs in song_diffs.items():
+            buckets = defaultdict(int)
+            for d in diffs:
+                buckets[d // bucket_size] += 1
+            
+            # Find the best bucket and its count
+            best_bucket = max(buckets, key=buckets.get)
+            hashes_matched_count = buckets[best_bucket]
+            # Use the average or representative offset from that bucket
+            representative_offset = best_bucket * bucket_size
+            
+            songs_matches.append((song_id, representative_offset, hashes_matched_count))
+
+        # 3. Sort by the alignment strength (count)
+        songs_matches.sort(key=lambda x: x[2], reverse=True)
+
+        # 4. Build JSON output structure
         songs_result = []
         for song_id, offset, hashes_matched_count in songs_matches[0:topn]:
             song = self.db.get_song_by_id(song_id)
             if not song: continue
 
-            # --- FIX: SHA1 Attribute Error ---
-            # Ensure we return the SHA1 in a format the rest of your API expects
+            # Handle SHA1 logic (maintaining consistency with your previous fix)
             raw_sha1 = song.get(FIELD_BLOB_SHA1)
             if isinstance(raw_sha1, bytes):
-                # If your API expects a hex string, keep it as bytes so .hex() works later
-                # OR convert it here. To match your error fix, let's keep it consistent:
-                blob_sha1 = raw_sha1
+                blob_sha1_str = raw_sha1.hex()
             else:
-                # If it's already a string, we might need to wrap it or handle it in the API
-                blob_sha1 = raw_sha1
+                blob_sha1_str = str(raw_sha1)
 
-            # --- FIX: Time Calculation ---
-            # Uses CQT. The 'offset' is the frame index.
-            # Time (sec) = (frame_index * hop_length) / sample_rate
-            nseconds = round(float(offset) * 512 / DEFAULT_FS, 5)
+            # Time Calculation: (frame_index * hop_length) / sample_rate
+            # Assuming 512 hop and 44100 Hz
+            nseconds = round(float(offset) * 512 / 44100, 5)
+
+            total_hashes_in_db = song.get(FIELD_TOTAL_HASHES) or 1
 
             songs_result.append({
-                SONG_ID: song_id,
-                SONG_NAME: song.get(SONG_NAME),
-                INPUT_HASHES: queried_hashes,
-                FINGERPRINTED_HASHES: song.get(FIELD_TOTAL_HASHES),
-                HASHES_MATCHED: hashes_matched_count, # Use the actual count from the histogram
-                INPUT_CONFIDENCE: hashes_matched_count / queried_hashes,
-                FINGERPRINTED_CONFIDENCE: hashes_matched_count / (song.get(FIELD_TOTAL_HASHES) or 1),
-                OFFSET: max(0, int(offset)),
-                OFFSET_SECS: max(0, nseconds),
-                FIELD_BLOB_SHA1: blob_sha1.lower()
+                "song_id": str(song_id),
+                "song_name": song.get(SONG_NAME),
+                "input_total_hashes": queried_hashes,
+                "fingerprinted_hashes_in_db": total_hashes_in_db,
+                "hashes_matched_in_input": hashes_matched_count,
+                "input_confidence": hashes_matched_count / queried_hashes,
+                "fingerprinted_confidence": hashes_matched_count / total_hashes_in_db,
+                "offset": max(0, int(offset)),
+                "offset_seconds": max(0, nseconds),
+                "blob_sha1": blob_sha1_str.lower()
             })
 
         return songs_result

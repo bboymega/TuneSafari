@@ -14,20 +14,20 @@ class BaseRecognizer(object, metaclass=abc.ABCMeta):
 
     def _recognize(self, *data) -> Tuple[List[Dict[str, any]], int, int, int]:
         fingerprint_times = []
-        hashes = set()  # to remove possible duplicated fingerprints we built a set.
+        hashes = set()  # to remove possible duplicated fingerprints
+        
         for channel in data:
             fingerprints, fingerprint_time = self.dejavu.generate_fingerprints(channel, Fs=self.Fs)
             fingerprint_times.append(fingerprint_time)
             hashes |= set(fingerprints)
 
-        matches, dedup_hashes, query_time = self.dejavu.find_matches(hashes)
+        # 1. matches now contains (song_id, db_offset, query_offset)
+        matches, dedup_hashes, query_time = self.dejavu.find_matches(list(hashes))
 
         t = time()
-        final_results = self.dejavu.align_matches(matches, dedup_hashes, len(hashes))
+        # 2. FIX: Remove 'dedup_hashes' from this call. 
+        # align_matches(matches, queried_hashes_count)
+        final_results = self.dejavu.align_matches(matches, len(hashes))
         align_time = time() - t
 
         return final_results, np.sum(fingerprint_times), query_time, align_time
-
-    @abc.abstractmethod
-    def recognize(self) -> Dict[str, any]:
-        pass  # base class does nothing

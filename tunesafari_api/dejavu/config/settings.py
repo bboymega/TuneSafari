@@ -147,3 +147,4 @@ TOPN = 3
 # Configuration for time irrelevance binning (handle time stretch)
 MIN_TIME_DELTA = 0.5
 MAX_TIME_DELTA = 3.0
+BUCKET_SIZE = 10

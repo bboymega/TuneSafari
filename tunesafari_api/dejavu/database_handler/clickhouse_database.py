@@ -259,35 +259,40 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
             """
             self.client.execute(INSERT_FINGERPRINT, values[index: index + batch_size])
     
-    def return_matches(self, hashes: List[Tuple[str, int]], batch_size: int = 1000) -> Tuple[List[Tuple[int, int]], Dict[str, int]]:
+    def return_matches(self, hashes: List[Tuple[int, int]], batch_size: int = 1000) -> Tuple[List[Tuple[any, int, int]], Dict[any, int]]:
         """
-        Searches Redis (cache) then ClickHouse (fallback). 
-        Uses NumPy for result expansion and fixes the NoneType dedup_hashes error.
+        ClickHouse + Redis implementation of fingerprint matching.
+        Returns: ([(song_id, db_offset, query_offset), ...], dedup_hashes)
         """
-        # Prepare Data for Query (Original Logic)
+        # 1. Map query hashes to their original offsets in the recording
         mapper = {}
         for hsh, offset in hashes:
             if hsh not in mapper:
                 mapper[hsh] = []
             mapper[hsh].append(offset)
         
+        # Convert mapper lists to numpy arrays for broadcasting later
         for hsh in mapper:
-            mapper[hsh] = np.array(mapper[hsh], dtype=np.int64)
+            mapper[hsh] = np.array(mapper[hsh], dtype=np.uint64)
 
         values = list(mapper.keys())
+        
         all_sids_flat = []
-        all_offsets_diff_flat = []
-        dedup_hashes: Dict[str, int] = {}
+        all_db_offsets_flat = []
+        all_q_offsets_flat = []
+        dedup_hashes: Dict[any, int] = {}
 
         for index in range(0, len(values), batch_size):
             current_batch = values[index: index + batch_size]
             
-            # Check Redis Cache
             hit_blocks = []
             cache_misses = []
+            
+            # --- PART 1: REDIS CACHE LOOKUP ---
             if self.redis_client:
                 pipe = self.redis_client.pipeline()
                 for hsh in current_batch:
+                    # Key is prefix:int_hash
                     pipe.get(f"{self.prefix}:{hsh}")
                 redis_responses = pipe.execute()
 
@@ -295,46 +300,48 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
                     if raw_data:
                         m_list = pickle.loads(raw_data)
                         if m_list:
-                            # Convert the first element of each row (the song_id) to a UUID object
-                            # This makes it look EXACTLY like the SQL results
-                            m_transformed = [[uuid.UUID(str(row[0])), row[1]] for row in m_list]
-                            
-                            m = np.array(m_transformed, dtype=object) 
+                            # Redis stores [[sid_uuid_str, offset], ...]
+                            m = np.array(m_list, dtype=object)
+                            # Re-attach the hash to the block for broadcasting
                             h_col = np.full((m.shape[0], 1), hsh)
                             hit_blocks.append(np.hstack((h_col, m)))
                     else:
                         cache_misses.append(hsh)
             else:
-                for hsh in current_batch:
-                    cache_misses.append(hsh)
+                cache_misses = current_batch
 
-
+            # --- PART 2: CLICKHOUSE FALLBACK ---
             sql_block = np.empty((0, 3), dtype=object)
             if cache_misses:
+                # ClickHouse Query: hash is UInt64, song_id is UUID
+                # We use repr() or simple string conversion for UInt64
                 SELECT_MULTIPLE = f"""
-                    SELECT `{FIELD_HASH}`, `{FIELD_SONG_ID}`, `{FIELD_OFFSET}`
-                    FROM `{FINGERPRINTS_TABLENAME}`
-                    WHERE `{FIELD_HASH}` IN ({', '.join([repr(h) for h in cache_misses])});
+                    SELECT hash, song_id, offset
+                    FROM {FINGERPRINTS_TABLENAME}
+                    WHERE hash IN ({', '.join(map(str, cache_misses))})
                 """
                 sql_results = self.client.execute(SELECT_MULTIPLE)
                 
                 if sql_results:
                     sql_block = np.array(sql_results, dtype=object)
                     
-                    # POPULATE CACHE (Vectorized Grouping for Redis)
-                    sort_idx = np.argsort(sql_block[:, 0])
-                    sorted_arr = sql_block[sort_idx]
-                    unq_h, indices = np.unique(sorted_arr[:, 0], return_index=True)
-                    groups = np.split(sorted_arr, indices[1:])
+                    # Update Redis Cache with the misses
                     if self.redis_client:
+                        # Group by hash to store unique blocks in Redis
+                        sort_idx = np.argsort(sql_block[:, 0])
+                        sorted_arr = sql_block[sort_idx]
+                        unq_h, indices = np.unique(sorted_arr[:, 0], return_index=True)
+                        groups = np.split(sorted_arr, indices[1:])
+                        
                         write_pipe = self.redis_client.pipeline()
                         for h_key, group in zip(unq_h, groups):
-                            # Cache only [sid, offset]
                             redis_key = f"{self.prefix}:{h_key}"
-                            write_pipe.setex(redis_key, 86400, pickle.dumps(group[:, [1, 2]].tolist()))
+                            # Store as [str(uuid), offset] for pickle compatibility
+                            pickle_data = [[str(row[1]), row[2]] for row in group]
+                            write_pipe.setex(redis_key, 86400, pickle.dumps(pickle_data))
                         write_pipe.execute()
 
-            # Merge Cache & DB results
+            # --- PART 3: BROADCASTING & ALIGNMENT PREP ---
             all_blocks = [sql_block] + hit_blocks if hit_blocks else [sql_block]
             combined = np.vstack(all_blocks) if any(b.size > 0 for b in all_blocks) else np.empty((0, 3))
 
@@ -342,29 +349,33 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
                 continue
 
             db_hashes = combined[:, 0]
-            db_sids = np.array([uuid.UUID(str(s)) for s in combined[:, 1]], dtype=object)
+            # Ensure UUIDs are consistent (ClickHouse returns UUID objects, Redis might return strings)
+            db_sids = np.array([uuid.UUID(str(s)) if not isinstance(s, uuid.UUID) else s for s in combined[:, 1]], dtype=object)
             db_offsets = combined[:, 2].astype(np.int64)
 
-            # Add Missed Hashes to Cache
+            # Populate dedup_hashes for stats (Total matches per song)
             u_sids, counts = np.unique(db_sids, return_counts=True)
             for sid, count in zip(u_sids, counts):
-                dedup_hashes[sid] = dedup_hashes.get(sid, 0) + count
+                dedup_hashes[sid] = dedup_hashes.get(sid, 0) + int(count)
 
+            # Broadcasting: For every hash, match every DB occurrence with every Query occurrence
             unique_hashes_in_batch = np.unique(db_hashes)
             for hsh in unique_hashes_in_batch:
                 match_indices = np.where(db_hashes == hsh)[0]
-                db_offsets_for_hsh = db_offsets[match_indices]
-                db_sids_for_hsh = db_sids[match_indices]
-                sampled_offsets = mapper[hsh]
+                db_off_hsh = db_offsets[match_indices]
+                db_sid_hsh = db_sids[match_indices]
+                q_off_hsh = mapper[hsh] # The offsets from your query recording
 
-                # Broadcast differences
-                diff_matrix = db_offsets_for_hsh[:, None] - sampled_offsets[None, :]
-                sid_matrix = np.repeat(db_sids_for_hsh, sampled_offsets.shape[0])
-                
-                all_sids_flat.extend(sid_matrix)
-                all_offsets_diff_flat.extend(diff_matrix.flatten())
+                n_db = len(db_off_hsh)
+                n_q = len(q_off_hsh)
 
-        results = list(zip(all_sids_flat, all_offsets_diff_flat)) if all_sids_flat else []
+                # Flat expansion for align_matches
+                all_sids_flat.extend(np.repeat(db_sid_hsh, n_q).tolist())
+                all_db_offsets_flat.extend(np.repeat(db_off_hsh, n_q).tolist())
+                all_q_offsets_flat.extend(np.tile(q_off_hsh, n_db).tolist())
+
+        # Return the 3-tuple (expected by your new align_matches)
+        results = list(zip(all_sids_flat, all_db_offsets_flat, all_q_offsets_flat))
         return results, dedup_hashes
         
     def delete_songs_by_id(self, song_ids, batch_size: int = 1000) -> None:
