@@ -140,9 +140,9 @@ FINGERPRINT_REDUCTION = 20
 TOPN = 3
 
 # Configuration for time irrelevance binning (handle time stretch)
-MIN_TIME_DELTA = 0.5
-MAX_TIME_DELTA = 3.0
-BUCKET_SIZE = 10
+MIN_TIME_DELTA = 1
+MAX_TIME_DELTA = 180
+BUCKET_SIZE = 25
 
 # Binning Config
 N_BINS = 96  # Number of bins

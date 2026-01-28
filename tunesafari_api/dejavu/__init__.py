@@ -16,10 +16,11 @@ from dejavu.base_classes.base_database import get_database
 from dejavu.config.settings import (DEFAULT_FS, DEFAULT_OVERLAP_RATIO,
                                     DEFAULT_WINDOW_SIZE, FIELD_BLOB_SHA1,
                                     FIELD_TOTAL_HASHES,
-                                    FINGERPRINTED_CONFIDENCE,
+                                    FINGERPRINTED_CONFIDENCE, PEAK_NEIGHBORHOOD_SIZE,
                                     FINGERPRINTED_HASHES, HASHES_MATCHED,
                                     INPUT_CONFIDENCE, INPUT_HASHES, OFFSET,
-                                    OFFSET_SECS, SONG_ID, SONG_NAME, TOPN, DEFAULT_FAN_VALUE, DEFAULT_AMP_MIN, BUCKET_SIZE, N_BINS, BINS_PER_OCTAVE, HOP_LENGTH, MIN_NOTE)
+                                    OFFSET_SECS, SONG_ID, SONG_NAME, TOPN, DEFAULT_FAN_VALUE, DEFAULT_AMP_MIN, BUCKET_SIZE, N_BINS, BINS_PER_OCTAVE, HOP_LENGTH, MIN_NOTE,
+                                    MAX_TIME_DELTA, MIN_TIME_DELTA)
 from dejavu.logic.fingerprint import fingerprint
 
 class Dejavu:
@@ -101,61 +102,81 @@ class Dejavu:
         return hashes, time() - t
 
     def _extract_peaks(self, spectrogram, threshold=DEFAULT_AMP_MIN) -> List[Tuple[int, int]]:
-        local_max = maximum_filter(spectrogram, size=(10, 10)) == spectrogram
-        background = (spectrogram == 0)
-        eroded_background = binary_erosion(background, structure=np.ones((10, 10)))
-        detected_peaks = local_max ^ eroded_background
+        peak_nei_size = PEAK_NEIGHBORHOOD_SIZE
         
-        freqs, times = np.where(detected_peaks)
-        amps = spectrogram[detected_peaks]
+        # Find Local Maxima using the neighborhood size
+        # size=(y, x) -> (frequency_bins, time_frames)
+        local_max = maximum_filter(spectrogram, size=(peak_nei_size, peak_nei_size)) == spectrogram
         
-        peak_list = []
-        for f, t, a in zip(freqs, times, amps):
-            if a > threshold:
-                peak_list.append((f, t))
+        # Vectorized Amplitude Filter (Faster than a for-loop)
+        # This replaces the background/erosion logic with a simple, reliable threshold
+        amps = spectrogram[local_max]
+        freqs, times = np.where(local_max)
+        
+        # Filter indices where amplitude is above threshold
+        filter_idxs = np.where(amps > threshold)
+        
+        # Create the list of (freq, time) tuples
+        peak_list = list(zip(freqs[filter_idxs], times[filter_idxs]))
+        
         return sorted(peak_list, key=lambda x: x[1])
 
-    def _generate_hashes(self, peaks, fan_out=DEFAULT_FAN_VALUE) -> List[Tuple[str, int]]:
+    def _generate_hashes(self, peaks, fan_out=DEFAULT_FAN_VALUE) -> List[Tuple[int, int]]:
         peaks = np.array(peaks)
         n = len(peaks)
-        if n < 3:
-            return []
+        if n < 3: return []
 
         f = peaks[:, 0].astype(np.int32)
         t = peaks[:, 1]
+
+        # Generate all (j, k) index pairs relative to each anchor
+        # Instead of nested loops, we create a meshgrid of neighbor offsets
+        j_offsets, k_offsets = np.triu_indices(fan_out + 1, k=1)
+        # triu_indices gives us pairs like (0,1), (0,2)...(1,2), (1,3)...
+        # Since your original loop started at j=1, we shift these to match your logic
+        j_offsets += 1
+        k_offsets += 1
+
+        # Create indices for all anchors and their corresponding j,k neighbors
+        # This creates a matrix of shape (N, num_triplets)
+        anchors = np.arange(n).reshape(-1, 1)
+        idx_j = anchors + j_offsets
+        idx_k = anchors + k_offsets
+
+        # Filter out-of-bounds indices
+        # This replaces 'idx_limit = n - k'
+        valid_idx_mask = idx_k < n
         
-        all_hashes = []
+        # Flatten these into long vectors for single-pass processing
+        row_idx, col_idx = np.where(valid_idx_mask)
+        target_j = idx_j[row_idx, col_idx]
+        target_k = idx_k[row_idx, col_idx]
+        target_a = row_idx # The anchor index
 
-        for j in range(1, fan_out + 1):
-            for k in range(j + 1, fan_out + 2):
-                idx_limit = n - k
-                
-                f1, f2, f3 = f[:idx_limit], f[j:j+idx_limit], f[k:k+idx_limit]
-                t1, t2, t3 = t[:idx_limit], t[j:j+idx_limit], t[k:k+idx_limit]
+        # Pull data using fancy indexing (The "Big Vectorization" step)
+        f1, f2, f3 = f[target_a], f[target_j], f[target_k]
+        t1, t2, t3 = t[target_a], t[target_j], t[target_k]
 
-                dt21 = t2 - t1
-                dt31 = t3 - t1
-                df21 = f2 - f1
-                df31 = f3 - f1
+        # Calculate Deltas and enforce your dt31 > 0 constant
+        dt21 = t2 - t1
+        dt31 = t3 - t1
+        
+        # Filter valid masks
+        valid_mask = (dt21 >= MIN_TIME_DELTA) & (dt21 <= MAX_TIME_DELTA) & (dt31 >= MIN_TIME_DELTA) & (dt31 <= MAX_TIME_DELTA) & (dt31 > dt21)
+        
+        # Final Logic & Packing (Vectorized)
+        t_ratios = (dt21[valid_mask] / dt31[valid_mask] * 1000).astype(np.int32)
+        df21 = (f2[valid_mask] - f1[valid_mask])
+        df31 = (f3[valid_mask] - f1[valid_mask])
+        anchor_times = t1[valid_mask].astype(np.int32)
 
-                valid = dt31 > 0
-                if not np.any(valid):
-                    continue
+        # bit-packing logic
+        packed_hashes = ((t_ratios & 0xFFFF) << 16) | \
+                        (((df21 + 128) & 0xFF) << 8) | \
+                        ((df31 + 128) & 0xFF)
 
-                # 1. Calculate the Ratio (Quantized to 3 decimals)
-                # We multiply by 1000 to keep 3 decimal places of precision as an int
-                t_ratio = (dt21[valid] / dt31[valid] * 1000).astype(np.int32)
-                
-                v_df21 = df21[valid]
-                v_df31 = df31[valid]
-                v_t1 = t1[valid].astype(np.int32)
-
-                # 2. Bit-pack into an integer
-                packed_hashes = (t_ratio << 16) | ((v_df21 + 100) << 8) | (v_df31 + 100)
-
-                all_hashes.extend(zip(packed_hashes.tolist(), v_t1.tolist()))
-
-        return all_hashes
+        # Return as list of tuples
+        return list(zip(packed_hashes.tolist(), anchor_times.tolist()))
 
     def find_matches(self, hashes: List[Tuple[int, int]]) -> Tuple[List[Tuple[any, int, int]], Dict[any, int], float]:
         """
@@ -225,8 +246,8 @@ class Dejavu:
                 blob_sha1_str = str(raw_sha1)
 
             # Time Calculation: (frame_index * hop_length) / sample_rate
-            # Assuming 512 hop and 44100 Hz
-            nseconds = round(float(offset) * 512 / 44100, 5)
+            # Default: 512 hop and 44100 Hz
+            nseconds = round(float(offset) * HOP_LENGTH / DEFAULT_FS, 5)
 
             total_hashes_in_db = song.get(FIELD_TOTAL_HASHES) or 1
 

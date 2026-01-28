@@ -6,6 +6,7 @@ import matplotlib.mlab as mlab
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.ndimage.filters import maximum_filter
+from numpy.lib.stride_tricks import sliding_window_view
 from scipy.ndimage.morphology import (binary_erosion,
                                       generate_binary_structure,
                                       iterate_structure)
@@ -44,86 +45,110 @@ def fingerprint(channel_samples: np.ndarray,
 
 
 def get_2D_peaks(arr2D: np.ndarray, amp_min: int = DEFAULT_AMP_MIN) -> List[Tuple[int, int]]:
+    # 1. Define the connectivity (usually 1 or 2)
     struct = generate_binary_structure(2, CONNECTIVITY_MASK)
     neighborhood = iterate_structure(struct, PEAK_NEIGHBORHOOD_SIZE)
 
+    # Find local maxima
     local_max = maximum_filter(arr2D, footprint=neighborhood) == arr2D
-    background = (arr2D > DEFAULT_AMP_MIN) # Background noise floor
-    eroded_background = binary_erosion(background, structure=neighborhood, border_value=1)
-    detected_peaks = local_max ^ eroded_background
-
-    freqs, times = np.where(detected_peaks)
-    amps = arr2D[detected_peaks]
     
+    # Use a simple amplitude mask instead of erosion logic.
+    # This ensures we don't accidentally delete peaks in loud musical sections.
+    amps = arr2D[local_max]
+    freqs, times = np.where(local_max)
+
     # Filter by amplitude
     filter_idxs = np.where(amps > amp_min)
+    
+    # Return sorted by time
     return sorted(zip(freqs[filter_idxs], times[filter_idxs]), key=itemgetter(1))
 
+
 def generate_triplet_hashes(peaks, fan_value=DEFAULT_FAN_VALUE, 
-                            min_delta_t=MIN_TIME_DELTA, max_delta_t=MAX_TIME_DELTA):
+                                       min_delta_t=MIN_TIME_DELTA, max_delta_t=MAX_TIME_DELTA):
     peaks = np.array(peaks)
     n = len(peaks)
-    if n < 3:
-        return []
+    if n < 3: return []
 
+    # Keep your exact types
     f = peaks[:, 0].astype(np.int32)
     t = peaks[:, 1]
 
-    # 1. Broad-stroke neighbor discovery
-    # Create a distance matrix for time: (N, fan_value + 1)
-    # We look at the next 'fan_value + offset' points to find valid window candidates
-    max_search = fan_value * 2 
-    idx = np.arange(n)
+    # We use a fixed lookahead window to allow vectorization. 
+    # To ensure we don't miss peaks within max_delta_t, we use a safe buffer.
+    lookahead = fan_value * 3 
     
-    # Efficiently gather neighbors using a sliding window view
-    # padding ensures we don't out-of-bounds
-    padded_t = np.pad(t, (0, max_search), constant_values=np.inf)
-    padded_f = np.pad(f, (0, max_search), constant_values=0)
-    
+    # Pad and create sliding window views for all neighbors at once
+    f_padded = np.pad(f, (0, lookahead), constant_values=0)
+    t_padded = np.pad(t, (0, lookahead), constant_values=np.inf)
+
+    # These matrices are (N, lookahead)
+    # Each row i contains the neighbors for anchor i
+    f_neighbors = sliding_window_view(f_padded[1:], window_shape=lookahead)[:n]
+    t_neighbors = sliding_window_view(t_padded[1:], window_shape=lookahead)[:n]
+
+    # Vectorized Delta Calculation (Broadcasting)
+    # t[:, None] reshapes t to (N, 1) so it broadcasts against (N, lookahead)
+    dt_matrix = t_neighbors - t[:, np.newaxis]
+    df_matrix = f_neighbors - f[:, np.newaxis]
+
+    # Create a Validity Mask
+    # This ensures neighbors are within your MIN/MAX constants
+    # 1. Ensure Point 2 is within bounds of Anchor 
+    # 2. Ensure Point 3 is within bounds of Anchor
+    # 3. Ensure Point 3 is strictly AFTER Point 2 (dt32 > 0)
+    m2 = (dt_matrix[:, j] >= min_delta_t) & (dt_matrix[:, j] <= max_delta_t)
+    m3 = (dt_matrix[:, k] >= min_delta_t) & (dt_matrix[:, k] <= max_delta_t)
+    m32 = (dt_matrix[:, k] > dt_matrix[:, j])
+
+    valid_mask = m2 & m3 & m32
+
     all_hashes = []
+    all_anchors = []
 
-    for i in range(n):
-        # Look ahead at a block of potential candidates
-        t_neighbors = padded_t[i+1 : i + max_search + 1]
-        f_neighbors = padded_f[i+1 : i + max_search + 1]
-        
-        # 2. Apply Time Window Mask
-        # Find indices within [min_delta_t, max_delta_t]
-        dt = t_neighbors - t[i]
-        mask = (dt >= min_delta_t) & (dt <= max_delta_t)
-        
-        valid_indices = np.where(mask)[0][:fan_value]
-        num_valid = len(valid_indices)
-        
-        if num_valid < 2:
-            continue
+    # Generate Triplets
+    # Instead of looping over N (songs), we loop over the lookahead depth
+    # This is much faster because fan_value is small (e.g., 20)
+    for j in range(lookahead):
+        # Point 2 candidates
+        dt21 = dt_matrix[:, j]
+        df21 = df_matrix[:, j]
+        m2 = valid_mask[:, j]
 
-        # Extract only valid candidate data
-        v_dt = dt[valid_indices]
-        v_f = f_neighbors[valid_indices]
-        v_df = v_f - f[i]
+        for k in range(j + 1, lookahead):
+            # Point 3 candidates
+            dt31 = dt_matrix[:, k]
+            df31 = df_matrix[:, k]
+            m3 = valid_mask[:, k]
 
-        # 3. Vectorized Triplet Formation for Anchor i
-        # We generate all pairs (j, k) from the valid candidates
-        # Combinations: j from 0 to num_valid-1, k from j+1 to num_valid
-        for j in range(num_valid):
-            # Point 2 data
-            dt21 = v_dt[j]
-            df21 = v_df[j]
-            
-            # Points 3 data (all points after j)
-            dt31 = v_dt[j+1:]
-            df31 = v_df[j+1:]
-            
-            # Vectorized calculation of ratios and hashes for all k in this j
-            t_ratios = (dt21 / dt31 * 100).astype(np.int32)
-            
-            # Bit-pack the hashes
-            # Packs: Ratio (high bits), df21, df31 (low bits)
-            hashes = (t_ratios << 16) | ((df21 + 100) << 8) | (df31 + 100)
-            
-            # Append as (hash, anchor_time)
-            anchor_time = int(t[i])
-            all_hashes.extend([(int(h), anchor_time) for h in hashes])
+            # Only process anchors where both neighbor j and k are valid
+            combined_mask = m2 & m3
+            if not np.any(combined_mask):
+                continue
 
-    return all_hashes
+            # CONSTANTS & LOGIC:
+            # t_ratios calculation
+            v_dt21 = dt21[combined_mask]
+            v_dt31 = dt31[combined_mask]
+            t_ratios = (v_dt21 / v_dt31 * 1000).astype(np.int32)
+
+            # PACKING LOGIC:
+            v_df21 = df21[combined_mask]
+            v_df31 = df31[combined_mask]
+            
+            # Applying bit-shifts and masks to prevent overflow
+            h = ((t_ratios & 0xFFFF) << 16) | \
+                (((v_df21 + 128) & 0xFF) << 8) | \
+                ((v_df31 + 128) & 0xFF)
+
+            all_hashes.append(h)
+            all_anchors.append(t[combined_mask].astype(np.int32))
+
+    if not all_hashes:
+        return []
+
+    # Final flattening of vectorized blocks
+    res_h = np.concatenate(all_hashes)
+    res_t = np.concatenate(all_anchors)
+
+    return list(zip(res_h.tolist(), res_t.tolist()))
