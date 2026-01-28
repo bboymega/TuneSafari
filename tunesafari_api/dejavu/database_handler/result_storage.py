@@ -11,24 +11,27 @@ from dejavu.config.settings import (CONFIG_FILE,
                                     FIELD_RESULT_ID, FIELD_RESULT_TOKEN,
 
                                     FIELD_BLOB_SHA1, FINGERPRINTED_CONFIDENCE, FINGERPRINTED_HASHES,
-                                    HASHES_MATCHED, INPUT_CONFIDENCE, INPUT_HASHES,
+                                    HASHES_MATCHED, INPUT_CONFIDENCE, INPUT_HASHES, DETECTED_TEMPO,
                                     FIELD_OFFSET, OFFSET_SECS, FIELD_SONG_ID, FIELD_SONGNAME,
 
                                     FIELD_RESULT1_BLOB_SHA1, FIELD_RESULT1_FINGERPRINTED_CONFIDENCE,
                                     FIELD_RESULT1_FINGERPRINTED_HASHES_IN_DB, FIELD_RESULT1_HASHES_MATCHED_IN_INPUT,
                                     FIELD_RESULT1_INPUT_CONFIDENCE, FIELD_RESULT1_INPUT_TOTAL_HASHES,
+                                    FIELD_RESULT1_DETECTED_TEMPO,
                                     FIELD_RESULT1_OFFSET, FIELD_RESULT1_OFFSET_SECONDS,
                                     FIELD_RESULT1_SONG_ID, FIELD_RESULT1_SONG_NAME,
 
                                     FIELD_RESULT2_BLOB_SHA1, FIELD_RESULT2_FINGERPRINTED_CONFIDENCE,
                                     FIELD_RESULT2_FINGERPRINTED_HASHES_IN_DB, FIELD_RESULT2_HASHES_MATCHED_IN_INPUT,
                                     FIELD_RESULT2_INPUT_CONFIDENCE, FIELD_RESULT2_INPUT_TOTAL_HASHES,
+                                    FIELD_RESULT2_DETECTED_TEMPO,
                                     FIELD_RESULT2_OFFSET, FIELD_RESULT2_OFFSET_SECONDS,
                                     FIELD_RESULT2_SONG_ID, FIELD_RESULT2_SONG_NAME,
 
                                     FIELD_RESULT3_BLOB_SHA1, FIELD_RESULT3_FINGERPRINTED_CONFIDENCE,
                                     FIELD_RESULT3_FINGERPRINTED_HASHES_IN_DB, FIELD_RESULT3_HASHES_MATCHED_IN_INPUT,
                                     FIELD_RESULT3_INPUT_CONFIDENCE, FIELD_RESULT3_INPUT_TOTAL_HASHES,
+                                    FIELD_RESULT3_DETECTED_TEMPO,
                                     FIELD_RESULT3_OFFSET, FIELD_RESULT3_OFFSET_SECONDS,
                                     FIELD_RESULT3_SONG_ID, FIELD_RESULT3_SONG_NAME,
 
@@ -45,6 +48,7 @@ CREATE_RESULTS_TABLE_CLICKHOUSE = f"""
     `{FIELD_RESULT1_HASHES_MATCHED_IN_INPUT}` UInt32 NOT NULL,
     `{FIELD_RESULT1_INPUT_CONFIDENCE}` Float64 NOT NULL,
     `{FIELD_RESULT1_INPUT_TOTAL_HASHES}` UInt32 NOT NULL,
+    `{FIELD_RESULT1_DETECTED_TEMPO}` Float32 NOT NULL,
     `{FIELD_RESULT1_OFFSET}` UInt32 NOT NULL,
     `{FIELD_RESULT1_OFFSET_SECONDS}` Float64 NOT NULL,
     `{FIELD_RESULT1_SONG_ID}` UUID NOT NULL,
@@ -56,6 +60,7 @@ CREATE_RESULTS_TABLE_CLICKHOUSE = f"""
     `{FIELD_RESULT2_HASHES_MATCHED_IN_INPUT}` UInt32,
     `{FIELD_RESULT2_INPUT_CONFIDENCE}` Float64,
     `{FIELD_RESULT2_INPUT_TOTAL_HASHES}` UInt32,
+    `{FIELD_RESULT2_DETECTED_TEMPO}` Float32,
     `{FIELD_RESULT2_OFFSET}` UInt32,
     `{FIELD_RESULT2_OFFSET_SECONDS}` Float64,
     `{FIELD_RESULT2_SONG_ID}` UUID,
@@ -67,6 +72,7 @@ CREATE_RESULTS_TABLE_CLICKHOUSE = f"""
     `{FIELD_RESULT3_HASHES_MATCHED_IN_INPUT}` UInt32,
     `{FIELD_RESULT3_INPUT_CONFIDENCE}` Float64,
     `{FIELD_RESULT3_INPUT_TOTAL_HASHES}` UInt32,
+    `{FIELD_RESULT3_DETECTED_TEMPO}` Float32,
     `{FIELD_RESULT3_OFFSET}` UInt32,
     `{FIELD_RESULT3_OFFSET_SECONDS}` Float64,
     `{FIELD_RESULT3_SONG_ID}` UUID,
@@ -87,6 +93,7 @@ CREATE_RESULTS_TABLE_MYSQL = f"""
     ,   `{FIELD_RESULT1_HASHES_MATCHED_IN_INPUT}` INT UNSIGNED NOT NULL
     ,   `{FIELD_RESULT1_INPUT_CONFIDENCE}` DOUBLE NOT NULL
     ,   `{FIELD_RESULT1_INPUT_TOTAL_HASHES}` INT UNSIGNED NOT NULL
+    ,   `{FIELD_RESULT1_DETECTED_TEMPO}` FLOAT NOT NULL
     ,   `{FIELD_RESULT1_OFFSET}` INT UNSIGNED NOT NULL
     ,   `{FIELD_RESULT1_OFFSET_SECONDS}` DOUBLE NOT NULL
     ,   `{FIELD_RESULT1_SONG_ID}` VARCHAR(36) NOT NULL
@@ -98,6 +105,7 @@ CREATE_RESULTS_TABLE_MYSQL = f"""
     ,   `{FIELD_RESULT2_HASHES_MATCHED_IN_INPUT}` INT UNSIGNED
     ,   `{FIELD_RESULT2_INPUT_CONFIDENCE}` DOUBLE
     ,   `{FIELD_RESULT2_INPUT_TOTAL_HASHES}` INT UNSIGNED
+    ,   `{FIELD_RESULT2_DETECTED_TEMPO}` FLOAT NOT NULL
     ,   `{FIELD_RESULT2_OFFSET}` INT UNSIGNED
     ,   `{FIELD_RESULT2_OFFSET_SECONDS}` DOUBLE
     ,   `{FIELD_RESULT2_SONG_ID}` VARCHAR(36)
@@ -109,6 +117,7 @@ CREATE_RESULTS_TABLE_MYSQL = f"""
     ,   `{FIELD_RESULT3_HASHES_MATCHED_IN_INPUT}` INT UNSIGNED
     ,   `{FIELD_RESULT3_INPUT_CONFIDENCE}` DOUBLE
     ,   `{FIELD_RESULT3_INPUT_TOTAL_HASHES}` INT UNSIGNED
+    ,   `{FIELD_RESULT3_DETECTED_TEMPO}` FLOAT NOT NULL
     ,   `{FIELD_RESULT3_OFFSET}` INT UNSIGNED
     ,   `{FIELD_RESULT3_OFFSET_SECONDS}` DOUBLE
     ,   `{FIELD_RESULT3_SONG_ID}` VARCHAR(36)
@@ -262,15 +271,15 @@ def store_result(results_token, results_array):
                     INSERT INTO `{RESULTS_TABLENAME}`(
                         `{FIELD_RESULT_TOKEN}`,
                         `{FIELD_RESULT1_BLOB_SHA1}`, `{FIELD_RESULT1_FINGERPRINTED_CONFIDENCE}`, `{FIELD_RESULT1_FINGERPRINTED_HASHES_IN_DB}`,
-                        `{FIELD_RESULT1_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT1_INPUT_CONFIDENCE}`, `{FIELD_RESULT1_INPUT_TOTAL_HASHES}`,
+                        `{FIELD_RESULT1_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT1_INPUT_CONFIDENCE}`, `{FIELD_RESULT1_INPUT_TOTAL_HASHES}`, `{FIELD_RESULT1_DETECTED_TEMPO}`,
                         `{FIELD_RESULT1_OFFSET}`, `{FIELD_RESULT1_OFFSET_SECONDS}`, `{FIELD_RESULT1_SONG_ID}`, `{FIELD_RESULT1_SONG_NAME}`,
 
                         `{FIELD_RESULT2_BLOB_SHA1}`, `{FIELD_RESULT2_FINGERPRINTED_CONFIDENCE}`, `{FIELD_RESULT2_FINGERPRINTED_HASHES_IN_DB}`,
-                        `{FIELD_RESULT2_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT2_INPUT_CONFIDENCE}`, `{FIELD_RESULT2_INPUT_TOTAL_HASHES}`,
+                        `{FIELD_RESULT2_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT2_INPUT_CONFIDENCE}`, `{FIELD_RESULT2_INPUT_TOTAL_HASHES}`, `{FIELD_RESULT2_DETECTED_TEMPO}`,
                         `{FIELD_RESULT2_OFFSET}`, `{FIELD_RESULT2_OFFSET_SECONDS}`, `{FIELD_RESULT2_SONG_ID}`, `{FIELD_RESULT2_SONG_NAME}`,
                         
                         `{FIELD_RESULT3_BLOB_SHA1}`, `{FIELD_RESULT3_FINGERPRINTED_CONFIDENCE}`, `{FIELD_RESULT3_FINGERPRINTED_HASHES_IN_DB}`,
-                        `{FIELD_RESULT3_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT3_INPUT_CONFIDENCE}`, `{FIELD_RESULT3_INPUT_TOTAL_HASHES}`,
+                        `{FIELD_RESULT3_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT3_INPUT_CONFIDENCE}`, `{FIELD_RESULT3_INPUT_TOTAL_HASHES}`, `{FIELD_RESULT3_DETECTED_TEMPO}`,
                         `{FIELD_RESULT3_OFFSET}`, `{FIELD_RESULT3_OFFSET_SECONDS}`, `{FIELD_RESULT3_SONG_ID}`, `{FIELD_RESULT3_SONG_NAME}`
                         )
                         VALUES
@@ -280,15 +289,15 @@ def store_result(results_token, results_array):
                     (
                         '{results_token}',
                         '{results_array[0][FIELD_BLOB_SHA1]}', '{results_array[0][FINGERPRINTED_CONFIDENCE]}', '{results_array[0][FINGERPRINTED_HASHES]}',
-                        '{results_array[0][HASHES_MATCHED]}', '{results_array[0][INPUT_CONFIDENCE]}', '{results_array[0][INPUT_HASHES]}',
+                        '{results_array[0][HASHES_MATCHED]}', '{results_array[0][INPUT_CONFIDENCE]}', '{results_array[0][INPUT_HASHES]}', '{results_array[0][DETECTED_TEMPO]}',
                         '{results_array[0][FIELD_OFFSET]}', '{results_array[0][OFFSET_SECS]}', '{results_array[0][FIELD_SONG_ID]}', '{results_array[0][FIELD_SONGNAME]}',
 
                         '{results_array[1][FIELD_BLOB_SHA1]}', '{results_array[1][FINGERPRINTED_CONFIDENCE]}', '{results_array[1][FINGERPRINTED_HASHES]}',
-                        '{results_array[1][HASHES_MATCHED]}', '{results_array[1][INPUT_CONFIDENCE]}', '{results_array[1][INPUT_HASHES]}',
+                        '{results_array[1][HASHES_MATCHED]}', '{results_array[1][INPUT_CONFIDENCE]}', '{results_array[1][INPUT_HASHES]}', '{results_array[1][DETECTED_TEMPO]}',
                         '{results_array[1][FIELD_OFFSET]}', '{results_array[1][OFFSET_SECS]}', '{results_array[1][FIELD_SONG_ID]}', '{results_array[1][FIELD_SONGNAME]}',
 
                         '{results_array[2][FIELD_BLOB_SHA1]}', '{results_array[2][FINGERPRINTED_CONFIDENCE]}', '{results_array[2][FINGERPRINTED_HASHES]}',
-                        '{results_array[2][HASHES_MATCHED]}', '{results_array[2][INPUT_CONFIDENCE]}', '{results_array[2][INPUT_HASHES]}',
+                        '{results_array[2][HASHES_MATCHED]}', '{results_array[2][INPUT_CONFIDENCE]}', '{results_array[2][INPUT_HASHES]}', '{results_array[2][DETECTED_TEMPO]}',
                         '{results_array[2][FIELD_OFFSET]}', '{results_array[2][OFFSET_SECS]}', '{results_array[2][FIELD_SONG_ID]}', '{results_array[2][FIELD_SONGNAME]}'
                     )
                     """
@@ -300,15 +309,15 @@ def store_result(results_token, results_array):
                     (
                         '{results_token}',
                         '{results_array[0][FIELD_BLOB_SHA1]}', '{results_array[0][FINGERPRINTED_CONFIDENCE]}', '{results_array[0][FINGERPRINTED_HASHES]}',
-                        '{results_array[0][HASHES_MATCHED]}', '{results_array[0][INPUT_CONFIDENCE]}', '{results_array[0][INPUT_HASHES]}',
+                        '{results_array[0][HASHES_MATCHED]}', '{results_array[0][INPUT_CONFIDENCE]}', '{results_array[0][INPUT_HASHES]}', '{results_array[0][DETECTED_TEMPO]}',
                         '{results_array[0][FIELD_OFFSET]}', '{results_array[0][OFFSET_SECS]}', '{results_array[0][FIELD_SONG_ID]}', '{results_array[0][FIELD_SONGNAME]}',
 
                         '{results_array[1][FIELD_BLOB_SHA1]}', '{results_array[1][FINGERPRINTED_CONFIDENCE]}', '{results_array[1][FINGERPRINTED_HASHES]}',
-                        '{results_array[1][HASHES_MATCHED]}', '{results_array[1][INPUT_CONFIDENCE]}', '{results_array[1][INPUT_HASHES]}',
+                        '{results_array[1][HASHES_MATCHED]}', '{results_array[1][INPUT_CONFIDENCE]}', '{results_array[1][INPUT_HASHES]}', '{results_array[1][DETECTED_TEMPO]}',
                         '{results_array[1][FIELD_OFFSET]}', '{results_array[1][OFFSET_SECS]}', '{results_array[1][FIELD_SONG_ID]}', '{results_array[1][FIELD_SONGNAME]}',
 
                         NULL, NULL, NULL,
-                        NULL, NULL, NULL,
+                        NULL, NULL, NULL, NULL,
                         NULL, NULL, NULL, NULL
                     )
                     """
@@ -320,15 +329,15 @@ def store_result(results_token, results_array):
                     (
                         '{results_token}',
                         '{results_array[0][FIELD_BLOB_SHA1]}', '{results_array[0][FINGERPRINTED_CONFIDENCE]}', '{results_array[0][FINGERPRINTED_HASHES]}',
-                        '{results_array[0][HASHES_MATCHED]}', '{results_array[0][INPUT_CONFIDENCE]}', '{results_array[0][INPUT_HASHES]}',
+                        '{results_array[0][HASHES_MATCHED]}', '{results_array[0][INPUT_CONFIDENCE]}', '{results_array[0][INPUT_HASHES]}', '{results_array[0][DETECTED_TEMPO]}',
                         '{results_array[0][FIELD_OFFSET]}', '{results_array[0][OFFSET_SECS]}', '{results_array[0][FIELD_SONG_ID]}', '{results_array[0][FIELD_SONGNAME]}',
                         
                         NULL, NULL, NULL,
-                        NULL, NULL, NULL,
+                        NULL, NULL, NULL, NULL,
                         NULL, NULL, NULL, NULL,
 
                         NULL, NULL, NULL,
-                        NULL, NULL, NULL,
+                        NULL, NULL, NULL, NULL,
                         NULL, NULL, NULL, NULL
                     )
                     """
@@ -346,29 +355,29 @@ def store_result(results_token, results_array):
                     INSERT INTO `{RESULTS_TABLENAME}`(
                     `{FIELD_RESULT_TOKEN}`,
                     `{FIELD_RESULT1_BLOB_SHA1}`, `{FIELD_RESULT1_FINGERPRINTED_CONFIDENCE}`, `{FIELD_RESULT1_FINGERPRINTED_HASHES_IN_DB}`,
-                    `{FIELD_RESULT1_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT1_INPUT_CONFIDENCE}`, `{FIELD_RESULT1_INPUT_TOTAL_HASHES}`,
+                    `{FIELD_RESULT1_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT1_INPUT_CONFIDENCE}`, `{FIELD_RESULT1_INPUT_TOTAL_HASHES}`, `{FIELD_RESULT1_DETECTED_TEMPO}`,
                     `{FIELD_RESULT1_OFFSET}`, `{FIELD_RESULT1_OFFSET_SECONDS}`, `{FIELD_RESULT1_SONG_ID}`, `{FIELD_RESULT1_SONG_NAME}`,
 
                     `{FIELD_RESULT2_BLOB_SHA1}`, `{FIELD_RESULT2_FINGERPRINTED_CONFIDENCE}`, `{FIELD_RESULT2_FINGERPRINTED_HASHES_IN_DB}`,
-                    `{FIELD_RESULT2_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT2_INPUT_CONFIDENCE}`, `{FIELD_RESULT2_INPUT_TOTAL_HASHES}`,
+                    `{FIELD_RESULT2_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT2_INPUT_CONFIDENCE}`, `{FIELD_RESULT2_INPUT_TOTAL_HASHES}`, `{FIELD_RESULT2_DETECTED_TEMPO}`,
                     `{FIELD_RESULT2_OFFSET}`, `{FIELD_RESULT2_OFFSET_SECONDS}`, `{FIELD_RESULT2_SONG_ID}`, `{FIELD_RESULT2_SONG_NAME}`,
                     
                     `{FIELD_RESULT3_BLOB_SHA1}`, `{FIELD_RESULT3_FINGERPRINTED_CONFIDENCE}`, `{FIELD_RESULT3_FINGERPRINTED_HASHES_IN_DB}`,
-                    `{FIELD_RESULT3_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT3_INPUT_CONFIDENCE}`, `{FIELD_RESULT3_INPUT_TOTAL_HASHES}`,
+                    `{FIELD_RESULT3_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT3_INPUT_CONFIDENCE}`, `{FIELD_RESULT3_INPUT_TOTAL_HASHES}`, `{FIELD_RESULT3_DETECTED_TEMPO}`,
                     `{FIELD_RESULT3_OFFSET}`, `{FIELD_RESULT3_OFFSET_SECONDS}`, `{FIELD_RESULT3_SONG_ID}`, `{FIELD_RESULT3_SONG_NAME}`
                     )
                     VALUES (
                     %s,
                     UNHEX(%s), %s, %s,
-                    %s, %s, %s,
+                    %s, %s, %s, %s,
                     %s, %s, %s, %s,
 
                     UNHEX(%s), %s, %s,
-                    %s, %s, %s,
+                    %s, %s, %s, %s,
                     %s, %s, %s, %s,
 
                     UNHEX(%s), %s, %s,
-                    %s, %s, %s,
+                    %s, %s, %s, %s,
                     %s, %s, %s, %s
                     );
                 """
@@ -400,7 +409,7 @@ def store_result(results_token, results_array):
                         results_array[1][FIELD_OFFSET], results_array[1][OFFSET_SECS], results_array[1][FIELD_SONG_ID], results_array[1][FIELD_SONGNAME],
 
                         None, None, None,
-                        None, None, None,
+                        None, None, None, None,
                         None, None, None, None
                     ))
                 elif len(results_array) == 1:
@@ -411,11 +420,11 @@ def store_result(results_token, results_array):
                         results_array[0][FIELD_OFFSET], results_array[0][OFFSET_SECS], results_array[0][FIELD_SONG_ID], results_array[0][FIELD_SONGNAME],
 
                         None, None, None,
-                        None, None, None,
+                        None, None, None, None,
                         None, None, None, None,
 
                         None, None, None,
-                        None, None, None,
+                        None, None, None, None,
                         None, None, None, None
                     ))
                 else:  # When the result set is empty
@@ -441,15 +450,15 @@ def search_result_in_db(results_token, db_config, result_queue):
             SELECT
                 `{FIELD_RESULT_TOKEN}`,
                 `{FIELD_RESULT1_BLOB_SHA1}`, `{FIELD_RESULT1_FINGERPRINTED_CONFIDENCE}`, `{FIELD_RESULT1_FINGERPRINTED_HASHES_IN_DB}`,
-                `{FIELD_RESULT1_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT1_INPUT_CONFIDENCE}`, `{FIELD_RESULT1_INPUT_TOTAL_HASHES}`,
+                `{FIELD_RESULT1_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT1_INPUT_CONFIDENCE}`, `{FIELD_RESULT1_INPUT_TOTAL_HASHES}`, `{FIELD_RESULT1_DETECTED_TEMPO}`,
                 `{FIELD_RESULT1_OFFSET}`, `{FIELD_RESULT1_OFFSET_SECONDS}`, `{FIELD_RESULT1_SONG_ID}`, `{FIELD_RESULT1_SONG_NAME}`,
 
                 `{FIELD_RESULT2_BLOB_SHA1}`, `{FIELD_RESULT2_FINGERPRINTED_CONFIDENCE}`, `{FIELD_RESULT2_FINGERPRINTED_HASHES_IN_DB}`,
-                `{FIELD_RESULT2_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT2_INPUT_CONFIDENCE}`, `{FIELD_RESULT2_INPUT_TOTAL_HASHES}`,
+                `{FIELD_RESULT2_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT2_INPUT_CONFIDENCE}`, `{FIELD_RESULT2_INPUT_TOTAL_HASHES}`, `{FIELD_RESULT2_DETECTED_TEMPO}`,
                 `{FIELD_RESULT2_OFFSET}`, `{FIELD_RESULT2_OFFSET_SECONDS}`, `{FIELD_RESULT2_SONG_ID}`, `{FIELD_RESULT2_SONG_NAME}`,
                     
                 `{FIELD_RESULT3_BLOB_SHA1}`, `{FIELD_RESULT3_FINGERPRINTED_CONFIDENCE}`, `{FIELD_RESULT3_FINGERPRINTED_HASHES_IN_DB}`,
-                `{FIELD_RESULT3_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT3_INPUT_CONFIDENCE}`, `{FIELD_RESULT3_INPUT_TOTAL_HASHES}`,
+                `{FIELD_RESULT3_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT3_INPUT_CONFIDENCE}`, `{FIELD_RESULT3_INPUT_TOTAL_HASHES}`, `{FIELD_RESULT3_DETECTED_TEMPO}`,
                 `{FIELD_RESULT3_OFFSET}`, `{FIELD_RESULT3_OFFSET_SECONDS}`, `{FIELD_RESULT3_SONG_ID}`, `{FIELD_RESULT3_SONG_NAME}`
             
             FROM `{RESULTS_TABLENAME}`
@@ -471,15 +480,15 @@ def search_result_in_db(results_token, db_config, result_queue):
             SELECT
                 `{FIELD_RESULT_TOKEN}`,
                 `{FIELD_RESULT1_BLOB_SHA1}`, `{FIELD_RESULT1_FINGERPRINTED_CONFIDENCE}`, `{FIELD_RESULT1_FINGERPRINTED_HASHES_IN_DB}`,
-                `{FIELD_RESULT1_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT1_INPUT_CONFIDENCE}`, `{FIELD_RESULT1_INPUT_TOTAL_HASHES}`,
+                `{FIELD_RESULT1_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT1_INPUT_CONFIDENCE}`, `{FIELD_RESULT1_INPUT_TOTAL_HASHES}`, `{FIELD_RESULT1_DETECTED_TEMPO}`,
                 `{FIELD_RESULT1_OFFSET}`, `{FIELD_RESULT1_OFFSET_SECONDS}`, `{FIELD_RESULT1_SONG_ID}`, `{FIELD_RESULT1_SONG_NAME}`,
 
                 `{FIELD_RESULT2_BLOB_SHA1}`, `{FIELD_RESULT2_FINGERPRINTED_CONFIDENCE}`, `{FIELD_RESULT2_FINGERPRINTED_HASHES_IN_DB}`,
-                `{FIELD_RESULT2_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT2_INPUT_CONFIDENCE}`, `{FIELD_RESULT2_INPUT_TOTAL_HASHES}`,
+                `{FIELD_RESULT2_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT2_INPUT_CONFIDENCE}`, `{FIELD_RESULT2_INPUT_TOTAL_HASHES}`, `{FIELD_RESULT2_DETECTED_TEMPO}`,
                 `{FIELD_RESULT2_OFFSET}`, `{FIELD_RESULT2_OFFSET_SECONDS}`, `{FIELD_RESULT2_SONG_ID}`, `{FIELD_RESULT2_SONG_NAME}`,
                     
                 `{FIELD_RESULT3_BLOB_SHA1}`, `{FIELD_RESULT3_FINGERPRINTED_CONFIDENCE}`, `{FIELD_RESULT3_FINGERPRINTED_HASHES_IN_DB}`,
-                `{FIELD_RESULT3_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT3_INPUT_CONFIDENCE}`, `{FIELD_RESULT3_INPUT_TOTAL_HASHES}`,
+                `{FIELD_RESULT3_HASHES_MATCHED_IN_INPUT}`, `{FIELD_RESULT3_INPUT_CONFIDENCE}`, `{FIELD_RESULT3_INPUT_TOTAL_HASHES}`, `{FIELD_RESULT3_DETECTED_TEMPO}`,
                 `{FIELD_RESULT3_OFFSET}`, `{FIELD_RESULT3_OFFSET_SECONDS}`, `{FIELD_RESULT3_SONG_ID}`, `{FIELD_RESULT3_SONG_NAME}`
             
             FROM `{RESULTS_TABLENAME}`
@@ -527,36 +536,39 @@ def search_result_all(results_token):
                         HASHES_MATCHED: result[4],
                         INPUT_CONFIDENCE: result[5],
                         INPUT_HASHES: result[6],
-                        FIELD_OFFSET: result[7],
-                        OFFSET_SECS: result[8],
-                        FIELD_SONG_ID: result[9],
-                        FIELD_SONGNAME: result[10]
+                        DETECTED_TEMPO: str(round(float(result[7]), 2)),
+                        FIELD_OFFSET: result[8],
+                        OFFSET_SECS: result[9],
+                        FIELD_SONG_ID: result[10],
+                        FIELD_SONGNAME: result[11]
                     })
-                if result[11]:
+                if result[12]:
                     binary_json["results"].append({
-                        FIELD_BLOB_SHA1: result[11] if type(result[11]) is str else result[1].hex(),
-                        FINGERPRINTED_CONFIDENCE: result[12],
-                        FINGERPRINTED_HASHES: result[13],
-                        HASHES_MATCHED: result[14],
-                        INPUT_CONFIDENCE: result[15],
-                        INPUT_HASHES: result[16],
-                        FIELD_OFFSET: result[17],
-                        OFFSET_SECS: result[18],
-                        FIELD_SONG_ID: result[19],
-                        FIELD_SONGNAME: result[20]
+                        FIELD_BLOB_SHA1: result[12] if type(result[12]) is str else result[12].hex(),
+                        FINGERPRINTED_CONFIDENCE: result[13],
+                        FINGERPRINTED_HASHES: result[14],
+                        HASHES_MATCHED: result[15],
+                        INPUT_CONFIDENCE: result[16],
+                        INPUT_HASHES: result[17],
+                        DETECTED_TEMPO: str(round(float(result[18]), 2)),
+                        FIELD_OFFSET: result[19],
+                        OFFSET_SECS: result[20],
+                        FIELD_SONG_ID: result[21],
+                        FIELD_SONGNAME: result[22]
                     })
-                if result[21]:
+                if result[23]:
                     binary_json["results"].append({
-                        FIELD_BLOB_SHA1: result[21] if type(result[21]) is str else result[1].hex(),
-                        FINGERPRINTED_CONFIDENCE: result[22],
-                        FINGERPRINTED_HASHES: result[23],
-                        HASHES_MATCHED: result[24],
-                        INPUT_CONFIDENCE: result[25],
-                        INPUT_HASHES: result[26],
-                        FIELD_OFFSET: result[27],
-                        OFFSET_SECS: result[28],
-                        FIELD_SONG_ID: result[29],
-                        FIELD_SONGNAME: result[30]
+                        FIELD_BLOB_SHA1: result[23] if type(result[23]) is str else result[23].hex(),
+                        FINGERPRINTED_CONFIDENCE: result[24],
+                        FINGERPRINTED_HASHES: result[25],
+                        HASHES_MATCHED: result[26],
+                        INPUT_CONFIDENCE: result[27],
+                        INPUT_HASHES: result[28],
+                        DETECTED_TEMPO: str(round(float(result[29]), 2)),
+                        FIELD_OFFSET: result[30],
+                        OFFSET_SECS: result[31],
+                        FIELD_SONG_ID: result[32],
+                        FIELD_SONGNAME: result[33]
                     })
                 # Make sure that the returned data format is JSON compatible
                 json_result = jsonify_binary(binary_json)

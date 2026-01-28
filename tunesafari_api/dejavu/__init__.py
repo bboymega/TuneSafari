@@ -20,7 +20,7 @@ from dejavu.config.settings import (DEFAULT_FS, DEFAULT_OVERLAP_RATIO,
                                     FINGERPRINTED_HASHES, HASHES_MATCHED,
                                     INPUT_CONFIDENCE, INPUT_HASHES, OFFSET,
                                     OFFSET_SECS, SONG_ID, SONG_NAME, TOPN, DEFAULT_FAN_VALUE, DEFAULT_AMP_MIN, BUCKET_SIZE, N_BINS, BINS_PER_OCTAVE, HOP_LENGTH, MIN_NOTE,
-                                    MAX_TIME_DELTA, MIN_TIME_DELTA)
+                                    MAX_TIME_DELTA, MIN_TIME_DELTA, DETECTED_TEMPO)
 from dejavu.logic.fingerprint import fingerprint
 
 class Dejavu:
@@ -201,40 +201,52 @@ class Dejavu:
         Optimized for Pitch/Tempo changes. Uses histogram binning to find 
         the strongest alignment peak for each song.
         """
-        if not matches:
-            return []
+        if not matches: return []
 
-        # 1. Group by song_id and apply Histogram Binning
-        # matches structure: (song_id, db_offset, query_offset)
-        # diff = db_offset - query_offset
-        song_diffs = defaultdict(list)
+        # Organize data
+        song_match_pairs = defaultdict(list)
         for sid, db_off, q_off in matches:
-            song_diffs[sid].append(db_off - q_off)
+            song_match_pairs[sid].append((db_off, q_off))
 
-        # 2. Find the strongest peak per song
-        # bucket_size=5 allows for ~58ms of drift (at 512 hop, 44100 Hz)
-        bucket_size = BUCKET_SIZE
+        # DJ Tempo Range: 0.8x to 1.3x speed
+        tempo_scales = np.linspace(0.8, 1.5, 36)
         songs_matches = []
 
-        for song_id, diffs in song_diffs.items():
-            buckets = defaultdict(int)
-            for d in diffs:
-                buckets[d // bucket_size] += 1
+        for song_id, pairs in song_match_pairs.items():
+            if len(pairs) < 15: # If there aren't at least 10 matches, don't bother scaling
+                continue
+            pairs_np = np.array(pairs)
+            db_offs = pairs_np[:, 0]
+            q_offs = pairs_np[:, 1]
             
-            # Find the best bucket and its count
-            best_bucket = max(buckets, key=buckets.get)
-            hashes_matched_count = buckets[best_bucket]
-            # Use the average or representative offset from that bucket
-            representative_offset = best_bucket * bucket_size
-            
-            songs_matches.append((song_id, representative_offset, hashes_matched_count))
+            best_count = 0
+            best_off = 0
+            best_t = 1.0
 
-        # 3. Sort by the alignment strength (count)
+            for s in tempo_scales:
+                # Shift the query offsets based on tempo 's'
+                diffs = db_offs - (q_offs * s)
+                
+                # Use bincount for lightning-fast histogramming
+                # We offset by a large number to handle negative diffs
+                shifted_diffs = (diffs // BUCKET_SIZE).astype(int)
+                min_val = shifted_diffs.min()
+                counts = np.bincount(shifted_diffs - min_val)
+                
+                current_max = counts.max()
+                if current_max > best_count:
+                    best_count = current_max
+                    best_off = (np.argmax(counts) + min_val) * BUCKET_SIZE
+                    best_t = s
+
+            songs_matches.append((song_id, best_off, best_count, best_t))
+
+        # Sort and return (Your existing JSON formatting logic goes here)
         songs_matches.sort(key=lambda x: x[2], reverse=True)
 
-        # 4. Build JSON output structure
+        # Build JSON output structure
         songs_result = []
-        for song_id, offset, hashes_matched_count in songs_matches[0:topn]:
+        for song_id, offset, hashes_matched_count, detected_tempo in songs_matches[0:topn]:
             song = self.db.get_song_by_id(song_id)
             if not song: continue
 
@@ -259,6 +271,7 @@ class Dejavu:
                 HASHES_MATCHED: hashes_matched_count,
                 INPUT_CONFIDENCE: hashes_matched_count / queried_hashes,
                 FINGERPRINTED_CONFIDENCE: hashes_matched_count / total_hashes_in_db,
+                DETECTED_TEMPO: round(detected_tempo, 2),
                 OFFSET: max(0, int(offset)),
                 OFFSET_SECS: max(0, nseconds),
                 FIELD_BLOB_SHA1: blob_sha1_str.lower()
