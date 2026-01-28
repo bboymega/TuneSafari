@@ -115,11 +115,6 @@ DEFAULT_OVERLAP_RATIO = 0.5
 # cause more fingerprints, but potentially better accuracy.
 DEFAULT_FAN_VALUE = 5  # 15 was the original value.
 
-# Minimum amplitude in spectrogram in order to be considered a peak.
-# This can be raised to reduce number of fingerprints, but can negatively
-# affect accuracy. Max Amp is 0 (dB) and this should always be negative.
-DEFAULT_AMP_MIN = -50
-
 # Number of cells around an amplitude peak in the spectrogram in order
 # for Dejavu to consider it a spectral peak. Higher values mean less
 # fingerprints and faster matching, but can potentially affect accuracy.
@@ -154,3 +149,6 @@ N_BINS = 96  # Number of bins
 BINS_PER_OCTAVE = 12
 HOP_LENGTH = 512 # Fidelity of fingerprinting samples. Default: 512 samples per 44100 samples per second for standarized audio input.
 MIN_NOTE = 'C1' # C1 key of the piano
+
+# Noise floor settings. Max Amp of the sample is 0 (dB) and this should always be negative.
+DEFAULT_AMP_MIN = -50

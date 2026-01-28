@@ -84,16 +84,15 @@ class Dejavu:
         t = time()
         samples_float = samples.astype(float)
 
-        # 1. CQT - Set to 84 bins (7 octaves) to stay safely below Nyquist limit
+        # CQT
         cqt = np.abs(librosa.cqt(samples_float, sr=Fs, hop_length=HOP_LENGTH, 
                                  fmin=librosa.note_to_hz(MIN_NOTE), 
                                  n_bins=N_BINS, bins_per_octave=BINS_PER_OCTAVE))
         
-        # 2. Convert to DB - Essential for peak finding consistency
         # This makes the loudest peak 0dB and the rest negative.
         spectrogram_db = librosa.amplitude_to_db(cqt, ref=np.max)
         
-        # 3. Peak Finding (using -50dB threshold at DEFAULT_AMP_MIN)
+        # Handle noise floor
         peaks = self._extract_peaks(spectrogram_db, threshold=DEFAULT_AMP_MIN)
         
         # 4. Hash Triplets

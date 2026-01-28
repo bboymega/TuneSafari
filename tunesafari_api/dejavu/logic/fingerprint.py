@@ -15,7 +15,7 @@ from dejavu.config.settings import (CONNECTIVITY_MASK, DEFAULT_AMP_MIN,
                                     DEFAULT_OVERLAP_RATIO, DEFAULT_WINDOW_SIZE,
                                     FINGERPRINT_REDUCTION, MAX_HASH_TIME_DELTA,
                                     MIN_HASH_TIME_DELTA,
-                                    PEAK_NEIGHBORHOOD_SIZE, PEAK_SORT, MIN_TIME_DELTA, MAX_TIME_DELTA, N_BINS, BINS_PER_OCTAVE, HOP_LENGTH, MIN_NOTE)
+                                    PEAK_NEIGHBORHOOD_SIZE, PEAK_SORT, MIN_TIME_DELTA, MAX_TIME_DELTA, N_BINS, BINS_PER_OCTAVE, HOP_LENGTH, MIN_NOTE, DEFAULT_AMP_MIN)
 
 
 def fingerprint(channel_samples: np.ndarray,
@@ -25,22 +25,21 @@ def fingerprint(channel_samples: np.ndarray,
     """
     Uses CQT for pitch invariance and Triplets for time invariance.
     """
-    # 1. Constant-Q Transform (Replaces FFT for pitch invariance)
 
     C = np.abs(librosa.cqt(channel_samples.astype(float), 
                          sr=Fs, 
                          hop_length=HOP_LENGTH, 
                          fmin=librosa.note_to_hz(MIN_NOTE), 
-                         n_bins=N_BINS,      # Reduced from 168
-                         bins_per_octave=BINS_PER_OCTAVE)) # Standard 12-tone scale
+                         n_bins=N_BINS, 
+                         bins_per_octave=BINS_PER_OCTAVE)) # Default: Standard 12-tone scale
 
-    # 2. Power to Decibels
+    # Power to Decibels
     arr2D = librosa.amplitude_to_db(C, ref=np.max)
 
-    # 3. Find 2D Peaks
+    # Find 2D Peaks
     local_maxima = get_2D_peaks(arr2D, amp_min=amp_min)
 
-    # 4. Generate Transformation-Invariant Triplets
+    # Generate Transformation-Invariant Triplets
     return generate_triplet_hashes(local_maxima, fan_value=fan_value)
 
 
@@ -49,7 +48,7 @@ def get_2D_peaks(arr2D: np.ndarray, amp_min: int = DEFAULT_AMP_MIN) -> List[Tupl
     neighborhood = iterate_structure(struct, PEAK_NEIGHBORHOOD_SIZE)
 
     local_max = maximum_filter(arr2D, footprint=neighborhood) == arr2D
-    background = (arr2D == -80) # Librosa DB floor is usually -80
+    background = (arr2D > DEFAULT_AMP_MIN) # Background noise floor
     eroded_background = binary_erosion(background, structure=neighborhood, border_value=1)
     detected_peaks = local_max ^ eroded_background
 
