@@ -107,6 +107,7 @@ export default function ResultsModule({ resultsJson, setProgress, setShowProgres
           {resultsJson.results.map((result: RecognitionResultItem, index: number) => {
             const sanitizedSearch = encodeURIComponent(result.song_name!.replace(/[_-]/g, ' '));
             const offsetSec = Math.round(result.offset_seconds);
+            const tempo = result.detected_tempo;
             return (
               <div
                 key={index}
@@ -118,7 +119,7 @@ export default function ResultsModule({ resultsJson, setProgress, setShowProgres
                   minWidth: "clamp(0px, 90svw, 360px)"                  
                 }}
               >
-                <small>#{index + 1} ⬤ Found at {Math.floor(offsetSec/60)}:{(offsetSec%60).toString().padStart(2,"0")}</small>
+                <small>#{index + 1} ⬤ Found at {Math.floor(offsetSec/60)}:{(offsetSec%60).toString().padStart(2,"0")} ⬤ Speed: {tempo}</small>
                 <small><br/></small>
                 <h5
                   className="mb-1"

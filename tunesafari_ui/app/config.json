@@ -1,6 +1,6 @@
 {
     "maxDuration": 10,
-    "apiBaseUrl": "http://172.16.241.129:8080/",
+    "apiBaseUrl": "http://172.22.7.185:8002/",
     "appName": "TuneSafari",
     "appLabel": "Find the Tracks That Sticks",
     "title": "Find the tracks that sticks",

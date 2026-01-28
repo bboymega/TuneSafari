@@ -9,6 +9,7 @@ import config from "./config.json"
 
 export interface RecognitionResultItem {
   blob_sha1: string;
+  detected_tempo: number;
   fingerprinted_confidence: number;
   fingerprinted_hashes_in_db: number;
   hashes_matched_in_input: number;
