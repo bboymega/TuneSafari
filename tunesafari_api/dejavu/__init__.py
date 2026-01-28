@@ -197,46 +197,52 @@ class Dejavu:
 
     def align_matches(self, matches: List[Tuple[int, int, int]], queried_hashes: int,
                   topn: int = TOPN) -> List[Dict[str, any]]:
-        """
-        Optimized for Pitch/Tempo changes. Uses histogram binning to find 
-        the strongest alignment peak for each song.
-        """
         if not matches: return []
 
-        # Organize data
+        # 1. Faster grouping
         song_match_pairs = defaultdict(list)
         for sid, db_off, q_off in matches:
             song_match_pairs[sid].append((db_off, q_off))
 
-        # DJ Tempo Range: 0.8x to 1.3x speed
         tempo_scales = np.linspace(0.8, 1.5, 36)
+        # Reshape tempo_scales to (36, 1) for broadcasting
+        scales_grid = tempo_scales[:, np.newaxis] 
+        
         songs_matches = []
 
         for song_id, pairs in song_match_pairs.items():
-            if len(pairs) < 15: # If there aren't at least 10 matches, don't bother scaling
+            # Candidate Filter: Skip weak songs before any heavy math
+            if len(pairs) < 15: 
                 continue
+                
             pairs_np = np.array(pairs)
-            db_offs = pairs_np[:, 0]
-            q_offs = pairs_np[:, 1]
+            db_offs = pairs_np[:, 0] # Shape: (N,)
+            q_offs = pairs_np[:, 1]   # Shape: (N,)
             
+            # 2. VECTORIZED MATH: Calculate all tempos at once
+            # (36, 1) * (N,) results in a (36, N) matrix
+            # Every row is a different tempo test
+            all_diffs = db_offs - (q_offs * scales_grid)
+            
+            # We need to find which row (tempo) has the most values in one bucket
             best_count = 0
             best_off = 0
             best_t = 1.0
 
-            for s in tempo_scales:
-                # Shift the query offsets based on tempo 's'
-                diffs = db_offs - (q_offs * s)
+            for i, s in enumerate(tempo_scales):
+                diffs = all_diffs[i] # Extract the pre-calculated row
                 
-                # Use bincount for lightning-fast histogramming
-                # We offset by a large number to handle negative diffs
-                shifted_diffs = (diffs // BUCKET_SIZE).astype(int)
-                min_val = shifted_diffs.min()
-                counts = np.bincount(shifted_diffs - min_val)
+                # Use bincount (already fast, but now it's all it does)
+                shifted = (diffs // BUCKET_SIZE).astype(int)
+                min_val = shifted.min()
+                counts = np.bincount(shifted - min_val)
                 
-                current_max = counts.max()
+                max_idx = counts.argmax()
+                current_max = counts[max_idx]
+                
                 if current_max > best_count:
                     best_count = current_max
-                    best_off = (np.argmax(counts) + min_val) * BUCKET_SIZE
+                    best_off = (max_idx + min_val) * BUCKET_SIZE
                     best_t = s
 
             songs_matches.append((song_id, best_off, best_count, best_t))
