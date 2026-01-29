@@ -199,89 +199,116 @@ class Dejavu:
                   topn: int = TOPN) -> List[Dict[str, any]]:
         if not matches: return []
 
+        # 1. Group matches by Song ID
         song_match_pairs = defaultdict(list)
         for sid, db_off, q_off in matches:
             song_match_pairs[sid].append((db_off, q_off))
 
-        # FIX: Increase resolution to 141 steps to land perfectly on 1.20x
-        tempo_scales = np.linspace(0.8, 1.5, 141)
+        # 2. High-Resolution Tempo Grid
+        # Increased to 71 steps (approx 0.01 increments) to catch precise speed shifts
+        tempo_scales = np.linspace(0.8, 1.5, 36)
         scales_grid = tempo_scales[:, np.newaxis] 
         
         candidate_songs = []
 
         for song_id, pairs in song_match_pairs.items():
-            # FIX: Raise noise floor. Random hits in large DBs reach 15-18 easily.
-            if len(pairs) < 22: 
+            if len(pairs) < 15: 
                 continue
                 
             pairs_np = np.array(pairs)
-            db_offs, q_offs = pairs_np[:, 0], pairs_np[:, 1]
+            db_offs = pairs_np[:, 0]
+            q_offs = pairs_np[:, 1]
+            
+            # Calculate all possible temporal offsets across the scale grid
+            # Equation: $Offset = DB_{time} - (Query_{time} \cdot Scale)$
             all_diffs = db_offs - (q_offs * scales_grid)
             
-            best_count, best_off, best_t = 0, 0, 1.0
+            best_count = 0
+            best_off = 0
+            best_t = 1.0
 
             for i, s in enumerate(tempo_scales):
                 diffs = all_diffs[i]
+                
+                # Bucketing with safety check
                 shifted = (diffs // BUCKET_SIZE).astype(int)
                 min_val = shifted.min()
-                
                 if shifted.max() - min_val > 200000: continue
                 
                 counts = np.bincount(shifted - min_val)
                 if len(counts) == 0: continue
 
-                # FIX: Use 5-tap smoothing for ALL checks to catch the 1.2x drift
-                if len(counts) >= 5:
-                    smoothed = np.convolve(counts, [0.25, 0.75, 1, 0.75, 0.25], mode='same')
-                    current_max, max_idx = smoothed.max(), smoothed.argmax()
-                elif len(counts) >= 3:
+                # 3. CONVOLUTIONAL SMOOTHING
+                # This captures 'leaked' matches in neighboring buckets caused by 1.1x interpolation
+                if len(counts) >= 3:
                     smoothed = np.convolve(counts, [0.5, 1, 0.5], mode='same')
-                    current_max, max_idx = smoothed.max(), smoothed.argmax()
+                    current_max = smoothed.max()
+                    max_idx = smoothed.argmax()
                 else:
-                    current_max, max_idx = counts.max(), counts.argmax()
+                    current_max = counts.max()
+                    max_idx = counts.argmax()
                 
                 if current_max > best_count:
-                    best_count, best_off, best_t = current_max, (max_idx + min_val) * BUCKET_SIZE, s
+                    best_count = current_max
+                    best_off = (max_idx + min_val) * BUCKET_SIZE
+                    best_t = s
 
+            # 4. INITIAL SCORING
+            # Penalize long songs with log10 to prevent 'giant' songs from winning by accident
             song_data = self.db.get_song_by_id(song_id)
-            if not song_data: continue
             total_hashes = song_data.get(FIELD_TOTAL_HASHES) or 1
             
-            # FIX: Precision Squared (rewards songs where matches stay in one bucket)
             precision = best_count / len(pairs)
-            score = (best_count * (precision ** 2)) / np.log10(total_hashes + 10)
+            score = (best_count * precision) / np.log10(total_hashes + 1)
             
             candidate_songs.append({
-                "song_id": song_id, "offset": best_off, "count": best_count,
-                "tempo": best_t, "score": score, "pairs": pairs_np
+                "song_id": song_id,
+                "offset": best_off,
+                "count": best_count,
+                "tempo": best_t,
+                "score": score,
+                "pairs": pairs_np
             })
 
+        # 5. TIGHTNESS VERIFICATION (Re-ranking)
+        # Essential for large DBs: noise has high variance, real matches have low variance.
         verified_results = []
+        # Sort by initial score and take top 20 for deep inspection
         candidate_songs.sort(key=lambda x: x["score"], reverse=True)
         
         for candidate in candidate_songs[:20]:
-            t, off, p_np = candidate["tempo"], candidate["offset"], candidate["pairs"]
+            t = candidate["tempo"]
+            off = candidate["offset"]
+            p_np = candidate["pairs"]
+            
+            # Recalculate aligned offsets for these matches
             aligned = p_np[:, 0] - (p_np[:, 1] * t)
+            
+            # Isolate matches that contributed to the peak
             in_peak = np.abs(aligned - off) < (BUCKET_SIZE * 2)
             peak_offsets = aligned[in_peak]
             
             if len(peak_offsets) < 5: continue
             
-            # Calculate Tightness (Standard Deviation)
+            # Calculate Standard Deviation (Tightness)
+            # Real matches at 1.1x will stay linear; noise will be scattered.
             tightness = np.std(peak_offsets)
             refined_score = candidate["score"] / (tightness + 1.0)
             
             candidate["score"] = refined_score
             verified_results.append(candidate)
 
+        # Final Sort
         verified_results.sort(key=lambda x: x["score"], reverse=True)
 
-        # 6. FORMAT OUTPUT (Exact original keys maintained)
+        # 6. FORMAT OUTPUT
         songs_result = []
         for res in verified_results[:topn]:
             sid = res["song_id"]
             song = self.db.get_song_by_id(sid)
+            
             nseconds = round(float(res["offset"]) * HOP_LENGTH / DEFAULT_FS, 5)
+            total_db_hashes = song.get(FIELD_TOTAL_HASHES) or 1
             top_scores_sum = sum(c['score'] for c in verified_results[:5])
             relative_conf = (res["score"] / top_scores_sum) if top_scores_sum > 0 else 0
             
@@ -289,9 +316,10 @@ class Dejavu:
                 SONG_ID: str(sid),
                 SONG_NAME: song.get(SONG_NAME),
                 INPUT_HASHES: queried_hashes,
-                FINGERPRINTED_HASHES: song.get(FIELD_TOTAL_HASHES) or 1,
+                FINGERPRINTED_HASHES: total_db_hashes,
                 HASHES_MATCHED: int(res["count"]),
                 INPUT_CONFIDENCE: res["count"] / queried_hashes,
+                #FINGERPRINTED_CONFIDENCE: res["count"] / total_db_hashes,
                 FINGERPRINTED_CONFIDENCE: relative_conf,
                 DETECTED_TEMPO: round(res["tempo"], 2),
                 OFFSET: max(0, int(res["offset"])),
