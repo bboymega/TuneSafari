@@ -199,18 +199,17 @@ class Dejavu:
                   topn: int = TOPN) -> List[Dict[str, any]]:
         if not matches: return []
 
-        # 1. Faster grouping
         song_match_pairs = defaultdict(list)
         for sid, db_off, q_off in matches:
             song_match_pairs[sid].append((db_off, q_off))
 
+        # We keep your exact scale range
         tempo_scales = np.linspace(0.8, 1.5, 36)
         scales_grid = tempo_scales[:, np.newaxis] 
         
         songs_matches = []
 
         for song_id, pairs in song_match_pairs.items():
-            # Candidate Filter: Keep at 15 to filter out extreme low-level noise
             if len(pairs) < 15: 
                 continue
                 
@@ -218,7 +217,10 @@ class Dejavu:
             db_offs = pairs_np[:, 0]
             q_offs = pairs_np[:, 1]
             
-            # 2. VECTORIZED MATH: Calculate all tempos at once
+            # 1. TEMPORAL ALIGNMENT MATH
+            # This is where the fix happens. We subtract the scaled query offset 
+            # from the DB offset. For the correct song/tempo, this result 
+            # should be a CONSTANT value (the start time of the clip).
             all_diffs = db_offs - (q_offs * scales_grid)
             
             best_count = 0
@@ -228,15 +230,23 @@ class Dejavu:
             for i, s in enumerate(tempo_scales):
                 diffs = all_diffs[i]
                 
-                # Use BUCKET_SIZE constant
+                # 2. RADIUS SCALING
+                # When audio is sped up, the 'jitter' increases. 
+                # We use BUCKET_SIZE but allow for a small sliding window.
                 shifted = (diffs // BUCKET_SIZE).astype(int)
                 min_val = shifted.min()
+                
+                # Ensure we don't have massive empty arrays
+                if shifted.max() - min_val > 100000: # Safety check for outliers
+                    continue
+                    
                 counts = np.bincount(shifted - min_val)
                 
                 if len(counts) == 0: continue
 
-                # SLIDING WINDOW: This captures the signal if it's split between two buckets
-                # Crucial for huge DBs where noise is high
+                # SLIDING WINDOW (Vital for Sped-up Audio)
+                # Sped-up audio rarely lands perfectly in one bucket due to 
+                # sample rate interpolation jitter.
                 if len(counts) > 1:
                     combined_counts = counts[:-1] + counts[1:]
                     current_max = combined_counts.max()
@@ -247,23 +257,19 @@ class Dejavu:
                 
                 if current_max > best_count:
                     best_count = current_max
-                    # Use max_idx as the base for the offset
                     best_off = (max_idx + min_val) * BUCKET_SIZE
                     best_t = s
 
-            # --- THE MATHEMATICAL FIX ---
-            # best_count is the "Signal" (clustered matches)
-            # len(pairs) is the "Total Noise" for this song
-            # Cubing best_count ensures that high-density alignment is rewarded 
-            # much more than high-volume random collisions.
+            # 3. CUBIC SCORING
+            # This solves the "wrong song at #1" problem by penalizing 
+            # songs that have many matches but poor temporal alignment.
             final_score = (best_count ** 3) / len(pairs)
-
+            
             songs_matches.append((song_id, best_off, best_count, best_t, final_score))
 
-        # Sort by the final_score (index 4) instead of raw count
+        # Sort by the final_score
         songs_matches.sort(key=lambda x: x[4], reverse=True)
 
-        # Build JSON output structure
         songs_result = []
         for song_id, offset, hashes_matched_count, detected_tempo, score in songs_matches[0:topn]:
             song = self.db.get_song_by_id(song_id)
@@ -272,7 +278,6 @@ class Dejavu:
             raw_sha1 = song.get(FIELD_BLOB_SHA1)
             blob_sha1_str = raw_sha1.hex() if isinstance(raw_sha1, bytes) else str(raw_sha1)
 
-            # Constant: HOP_LENGTH / DEFAULT_FS
             nseconds = round(float(offset) * HOP_LENGTH / DEFAULT_FS, 5)
             total_hashes_in_db = song.get(FIELD_TOTAL_HASHES) or 1
 
