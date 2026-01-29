@@ -282,7 +282,7 @@ class Dejavu:
                 INPUT_HASHES: queried_hashes,
                 FINGERPRINTED_HASHES: total_hashes_in_db,
                 HASHES_MATCHED: hashes_matched_count,
-                "SCORE": round(score, 2), 
+                #"SCORE": round(score, 2), 
                 INPUT_CONFIDENCE: hashes_matched_count / queried_hashes,
                 FINGERPRINTED_CONFIDENCE: hashes_matched_count / total_hashes_in_db,
                 DETECTED_TEMPO: round(detected_tempo, 2),
