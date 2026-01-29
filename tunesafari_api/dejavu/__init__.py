@@ -205,68 +205,67 @@ class Dejavu:
             song_match_pairs[sid].append((db_off, q_off))
 
         tempo_scales = np.linspace(0.8, 1.5, 36)
-        # Reshape tempo_scales to (36, 1) for broadcasting
         scales_grid = tempo_scales[:, np.newaxis] 
         
         songs_matches = []
 
         for song_id, pairs in song_match_pairs.items():
-            # Candidate Filter: Skip weak songs before any heavy math
+            # Candidate Filter: Slightly increased to filter out database noise
             if len(pairs) < 15: 
                 continue
                 
             pairs_np = np.array(pairs)
-            db_offs = pairs_np[:, 0] # Shape: (N,)
-            q_offs = pairs_np[:, 1]   # Shape: (N,)
+            db_offs = pairs_np[:, 0]
+            q_offs = pairs_np[:, 1]
             
-            # 2. VECTORIZED MATH: Calculate all tempos at once
-            # (36, 1) * (N,) results in a (36, N) matrix
-            # Every row is a different tempo test
             all_diffs = db_offs - (q_offs * scales_grid)
             
-            # We need to find which row (tempo) has the most values in one bucket
             best_count = 0
             best_off = 0
             best_t = 1.0
 
             for i, s in enumerate(tempo_scales):
-                diffs = all_diffs[i] # Extract the pre-calculated row
-                
-                # Use bincount (already fast, but now it's all it does)
+                diffs = all_diffs[i]
                 shifted = (diffs // BUCKET_SIZE).astype(int)
                 min_val = shifted.min()
                 counts = np.bincount(shifted - min_val)
                 
-                max_idx = counts.argmax()
-                current_max = counts[max_idx]
+                # SLIDING WINDOW: Captures matches split across bucket boundaries
+                if len(counts) > 1:
+                    combined_counts = counts[:-1] + counts[1:]
+                    current_max = combined_counts.max()
+                    max_idx = combined_counts.argmax()
+                else:
+                    current_max = counts[0]
+                    max_idx = 0
                 
                 if current_max > best_count:
                     best_count = current_max
                     best_off = (max_idx + min_val) * BUCKET_SIZE
                     best_t = s
 
-            songs_matches.append((song_id, best_off, best_count, best_t))
+            # --- THE FIX FOR LARGE DATABASES ---
+            # Calculate a Density Score. 
+            # A true match has a high ratio of (clustered matches / total matches).
+            # This prevents "noisy" songs with 100 random matches from beating 
+            # a "clean" song with 40 aligned matches.
+            density_score = (best_count ** 2) / len(pairs)
+            
+            songs_matches.append((song_id, best_off, best_count, best_t, density_score))
 
-        # Sort and return (Your existing JSON formatting logic goes here)
-        songs_matches.sort(key=lambda x: x[2], reverse=True)
+        # Sort by the density_score (index 4) instead of raw count (index 2)
+        songs_matches.sort(key=lambda x: x[4], reverse=True)
 
         # Build JSON output structure
         songs_result = []
-        for song_id, offset, hashes_matched_count, detected_tempo in songs_matches[0:topn]:
+        for song_id, offset, hashes_matched_count, detected_tempo, score in songs_matches[0:topn]:
             song = self.db.get_song_by_id(song_id)
             if not song: continue
 
-            # Handle SHA1 logic (maintaining consistency with your previous fix)
             raw_sha1 = song.get(FIELD_BLOB_SHA1)
-            if isinstance(raw_sha1, bytes):
-                blob_sha1_str = raw_sha1.hex()
-            else:
-                blob_sha1_str = str(raw_sha1)
+            blob_sha1_str = raw_sha1.hex() if isinstance(raw_sha1, bytes) else str(raw_sha1)
 
-            # Time Calculation: (frame_index * hop_length) / sample_rate
-            # Default: 512 hop and 44100 Hz
             nseconds = round(float(offset) * HOP_LENGTH / DEFAULT_FS, 5)
-
             total_hashes_in_db = song.get(FIELD_TOTAL_HASHES) or 1
 
             songs_result.append({
@@ -275,6 +274,7 @@ class Dejavu:
                 INPUT_HASHES: queried_hashes,
                 FINGERPRINTED_HASHES: total_hashes_in_db,
                 HASHES_MATCHED: hashes_matched_count,
+                #"SCORE": round(score, 2), # New metric for debugging
                 INPUT_CONFIDENCE: hashes_matched_count / queried_hashes,
                 FINGERPRINTED_CONFIDENCE: hashes_matched_count / total_hashes_in_db,
                 DETECTED_TEMPO: round(detected_tempo, 2),
