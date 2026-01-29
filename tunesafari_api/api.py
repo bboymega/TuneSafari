@@ -181,10 +181,10 @@ def recognize_api():
 
                     if max_duration > 0:
                         try:
-                            blob, err = ffmpeg.input('pipe:0') \
-                            .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=1, sample_fmt='s16', ss=start_time, t=duration) \
+                            blob, err = ffmpeg.input('pipe:0', ss=start_time, t=duration) \
+                            .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=1, map='0:a', sample_fmt='s16') \
                             .run(input=blob, capture_stdout=True, capture_stderr=True)
-                            if not blob or len(blob) == 0:
+                            if not blob or len(blob) < 100:
                                 sys.stderr.write("\033[31m" + "ERROR: FFmpeg returned empty audio data: " + err.decode() + "\033[0m\n")
                                 return jsonify({"status": "error", "message": "Extracted audio is empty"}), 400
                         except Exception as e:
@@ -208,17 +208,17 @@ def recognize_api():
                 
                 if request.form.get('duration'):
                     duration = float(request.form.get('duration'))
-                    blob, err = ffmpeg.input('pipe:0') \
-                    .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=1, sample_fmt='s16', ss=start_time, t=duration) \
+                    blob, err = ffmpeg.input('pipe:0', ss=start_time, t=duration) \
+                    .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=1, map='0:a', sample_fmt='s16') \
                     .run(input=blob, capture_stdout=True, capture_stderr=True)
                     if not blob or len(blob) == 0:
                         sys.stderr.write("\033[31m" + "ERROR: FFmpeg returned empty audio data: " + err.decode() + "\033[0m\n")
                         return jsonify({"status": "error", "message": "Extracted audio is empty"}), 400
                 else:
-                    blob, err = ffmpeg.input('pipe:0') \
-                    .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=1, sample_fmt='s16', ss=start_time) \
+                    blob, err = ffmpeg.input('pipe:0', ss=start_time) \
+                    .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=1, map='0:a', sample_fmt='s16') \
                     .run(input=blob, capture_stdout=True, capture_stderr=True)
-                    if not blob or len(blob) == 0:
+                    if not blob or len(blob) < 100:
                         sys.stderr.write("\033[31m" + "ERROR: FFmpeg returned empty audio data: " + err.decode() + "\033[0m\n")
                         return jsonify({"status": "error", "message": "Extracted audio is empty"}), 400
 
