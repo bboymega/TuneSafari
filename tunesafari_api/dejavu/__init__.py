@@ -264,7 +264,7 @@ class Dejavu:
             # This solves the "wrong song at #1" problem by penalizing 
             # songs that have many matches but poor temporal alignment.
             total_hashes = self.db.get_song_by_id(song_id).get(FIELD_TOTAL_HASHES) or 1
-            final_score = (best_count ** 3) / (len(pairs) * np.log1p(total_hashes))
+            final_score = (best_count ** 3) / (len(pairs) * np.sqrt(total_db_hashes))
             
             songs_matches.append((song_id, best_off, best_count, best_t, final_score))
 
