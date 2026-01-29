@@ -199,15 +199,17 @@ class Dejavu:
                   topn: int = TOPN) -> List[Dict[str, any]]:
         if not matches: return []
 
+        # 1. Group matches by Song ID
         song_match_pairs = defaultdict(list)
         for sid, db_off, q_off in matches:
             song_match_pairs[sid].append((db_off, q_off))
 
-        # We keep your exact scale range
+        # 2. High-Resolution Tempo Grid
+        # Increased to 71 steps (approx 0.01 increments) to catch precise speed shifts
         tempo_scales = np.linspace(0.8, 1.5, 36)
         scales_grid = tempo_scales[:, np.newaxis] 
         
-        songs_matches = []
+        candidate_songs = []
 
         for song_id, pairs in song_match_pairs.items():
             if len(pairs) < 15: 
@@ -217,10 +219,8 @@ class Dejavu:
             db_offs = pairs_np[:, 0]
             q_offs = pairs_np[:, 1]
             
-            # 1. TEMPORAL ALIGNMENT MATH
-            # This is where the fix happens. We subtract the scaled query offset 
-            # from the DB offset. For the correct song/tempo, this result 
-            # should be a CONSTANT value (the start time of the clip).
+            # Calculate all possible temporal offsets across the scale grid
+            # Equation: $Offset = DB_{time} - (Query_{time} \cdot Scale)$
             all_diffs = db_offs - (q_offs * scales_grid)
             
             best_count = 0
@@ -230,74 +230,101 @@ class Dejavu:
             for i, s in enumerate(tempo_scales):
                 diffs = all_diffs[i]
                 
-                # 2. RADIUS SCALING
-                # When audio is sped up, the 'jitter' increases. 
-                # We use BUCKET_SIZE but allow for a small sliding window.
+                # Bucketing with safety check
                 shifted = (diffs // BUCKET_SIZE).astype(int)
                 min_val = shifted.min()
+                if shifted.max() - min_val > 200000: continue
                 
-                # Ensure we don't have massive empty arrays
-                if shifted.max() - min_val > 100000: # Safety check for outliers
-                    continue
-                    
                 counts = np.bincount(shifted - min_val)
-                
                 if len(counts) == 0: continue
 
-                # SLIDING WINDOW (Vital for Sped-up Audio)
-                # Sped-up audio rarely lands perfectly in one bucket due to 
-                # sample rate interpolation jitter.
-                if len(counts) > 1:
-                    combined_counts = counts[:-1] + counts[1:]
-                    current_max = combined_counts.max()
-                    max_idx = combined_counts.argmax()
+                # 3. CONVOLUTIONAL SMOOTHING
+                # This captures 'leaked' matches in neighboring buckets caused by 1.1x interpolation
+                if len(counts) >= 3:
+                    smoothed = np.convolve(counts, [0.5, 1, 0.5], mode='same')
+                    current_max = smoothed.max()
+                    max_idx = smoothed.argmax()
                 else:
-                    current_max = counts[0]
-                    max_idx = 0
+                    current_max = counts.max()
+                    max_idx = counts.argmax()
                 
                 if current_max > best_count:
                     best_count = current_max
                     best_off = (max_idx + min_val) * BUCKET_SIZE
                     best_t = s
 
-            # 3. CUBIC SCORING
-            # This solves the "wrong song at #1" problem by penalizing 
-            # songs that have many matches but poor temporal alignment.
-            total_hashes = self.db.get_song_by_id(song_id).get(FIELD_TOTAL_HASHES) or 1
-            length_penalty = np.log2(total_hashes)
-            if length_penalty < 1: length_penalty = 1
-            alignment_density = (best_count / len(pairs)) ** 2
-            final_score = (best_count * alignment_density * 1000) / length_penalty
+            # 4. INITIAL SCORING
+            # Penalize long songs with log10 to prevent 'giant' songs from winning by accident
+            song_data = self.db.get_song_by_id(song_id)
+            total_hashes = song_data.get(FIELD_TOTAL_HASHES) or 1
             
-            songs_matches.append((song_id, best_off, best_count, best_t, final_score))
+            precision = best_count / len(pairs)
+            score = (best_count * precision) / np.log10(total_hashes + 1)
+            
+            candidate_songs.append({
+                "song_id": song_id,
+                "offset": best_off,
+                "count": best_count,
+                "tempo": best_t,
+                "score": score,
+                "pairs": pairs_np
+            })
 
-        # Sort by the final_score
-        songs_matches.sort(key=lambda x: x[4], reverse=True)
+        # 5. TIGHTNESS VERIFICATION (Re-ranking)
+        # Essential for large DBs: noise has high variance, real matches have low variance.
+        verified_results = []
+        # Sort by initial score and take top 20 for deep inspection
+        candidate_songs.sort(key=lambda x: x["score"], reverse=True)
+        
+        for candidate in candidate_songs[:20]:
+            t = candidate["tempo"]
+            off = candidate["offset"]
+            p_np = candidate["pairs"]
+            
+            # Recalculate aligned offsets for these matches
+            aligned = p_np[:, 0] - (p_np[:, 1] * t)
+            
+            # Isolate matches that contributed to the peak
+            in_peak = np.abs(aligned - off) < (BUCKET_SIZE * 2)
+            peak_offsets = aligned[in_peak]
+            
+            if len(peak_offsets) < 5: continue
+            
+            # Calculate Standard Deviation (Tightness)
+            # Real matches at 1.1x will stay linear; noise will be scattered.
+            tightness = np.std(peak_offsets)
+            refined_score = candidate["score"] / (tightness + 1.0)
+            
+            candidate["score"] = refined_score
+            verified_results.append(candidate)
 
+        # Final Sort
+        verified_results.sort(key=lambda x: x["score"], reverse=True)
+
+        # 6. FORMAT OUTPUT
         songs_result = []
-        for song_id, offset, hashes_matched_count, detected_tempo, score in songs_matches[0:topn]:
-            song = self.db.get_song_by_id(song_id)
-            if not song: continue
-
-            raw_sha1 = song.get(FIELD_BLOB_SHA1)
-            blob_sha1_str = raw_sha1.hex() if isinstance(raw_sha1, bytes) else str(raw_sha1)
-
-            nseconds = round(float(offset) * HOP_LENGTH / DEFAULT_FS, 5)
-            total_hashes_in_db = song.get(FIELD_TOTAL_HASHES) or 1
-
+        for res in verified_results[:topn]:
+            sid = res["song_id"]
+            song = self.db.get_song_by_id(sid)
+            
+            nseconds = round(float(res["offset"]) * HOP_LENGTH / DEFAULT_FS, 5)
+            total_db_hashes = song.get(FIELD_TOTAL_HASHES) or 1
+            top_scores_sum = sum(c['score'] for c in verified_results[:5])
+            relative_conf = (res["score"] / top_scores_sum) if top_scores_sum > 0 else 0
+            
             songs_result.append({
-                SONG_ID: str(song_id),
+                SONG_ID: str(sid),
                 SONG_NAME: song.get(SONG_NAME),
                 INPUT_HASHES: queried_hashes,
-                FINGERPRINTED_HASHES: total_hashes_in_db,
-                HASHES_MATCHED: hashes_matched_count,
-                #"SCORE": round(score, 2), 
-                INPUT_CONFIDENCE: hashes_matched_count / queried_hashes,
-                FINGERPRINTED_CONFIDENCE: hashes_matched_count / total_hashes_in_db,
-                DETECTED_TEMPO: round(detected_tempo, 2),
-                OFFSET: max(0, int(offset)),
+                FINGERPRINTED_HASHES: total_db_hashes,
+                HASHES_MATCHED: int(res["count"]),
+                INPUT_CONFIDENCE: res["count"] / queried_hashes,
+                #FINGERPRINTED_CONFIDENCE: res["count"] / total_db_hashes,
+                FINGERPRINTED_CONFIDENCE: relative_conf,
+                DETECTED_TEMPO: round(res["tempo"], 2),
+                OFFSET: max(0, int(res["offset"])),
                 OFFSET_SECS: max(0, nseconds),
-                FIELD_BLOB_SHA1: blob_sha1_str.lower()
+                FIELD_BLOB_SHA1: song.get(FIELD_BLOB_SHA1).hex().lower() if isinstance(song.get(FIELD_BLOB_SHA1), bytes) else str(song.get(FIELD_BLOB_SHA1)).lower()
             })
 
         return songs_result
