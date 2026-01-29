@@ -210,7 +210,7 @@ class Dejavu:
         songs_matches = []
 
         for song_id, pairs in song_match_pairs.items():
-            # Candidate Filter: Slightly increased to filter out database noise
+            # Candidate Filter: Keep at 15 to filter out extreme low-level noise
             if len(pairs) < 15: 
                 continue
                 
@@ -218,6 +218,7 @@ class Dejavu:
             db_offs = pairs_np[:, 0]
             q_offs = pairs_np[:, 1]
             
+            # 2. VECTORIZED MATH: Calculate all tempos at once
             all_diffs = db_offs - (q_offs * scales_grid)
             
             best_count = 0
@@ -226,11 +227,16 @@ class Dejavu:
 
             for i, s in enumerate(tempo_scales):
                 diffs = all_diffs[i]
+                
+                # Use BUCKET_SIZE constant
                 shifted = (diffs // BUCKET_SIZE).astype(int)
                 min_val = shifted.min()
                 counts = np.bincount(shifted - min_val)
                 
-                # SLIDING WINDOW: Captures matches split across bucket boundaries
+                if len(counts) == 0: continue
+
+                # SLIDING WINDOW: This captures the signal if it's split between two buckets
+                # Crucial for huge DBs where noise is high
                 if len(counts) > 1:
                     combined_counts = counts[:-1] + counts[1:]
                     current_max = combined_counts.max()
@@ -241,19 +247,20 @@ class Dejavu:
                 
                 if current_max > best_count:
                     best_count = current_max
+                    # Use max_idx as the base for the offset
                     best_off = (max_idx + min_val) * BUCKET_SIZE
                     best_t = s
 
-            # --- THE FIX FOR LARGE DATABASES ---
-            # Calculate a Density Score. 
-            # A true match has a high ratio of (clustered matches / total matches).
-            # This prevents "noisy" songs with 100 random matches from beating 
-            # a "clean" song with 40 aligned matches.
-            density_score = (best_count ** 2) / len(pairs)
-            
-            songs_matches.append((song_id, best_off, best_count, best_t, density_score))
+            # --- THE MATHEMATICAL FIX ---
+            # best_count is the "Signal" (clustered matches)
+            # len(pairs) is the "Total Noise" for this song
+            # Cubing best_count ensures that high-density alignment is rewarded 
+            # much more than high-volume random collisions.
+            final_score = (best_count ** 3) / len(pairs)
 
-        # Sort by the density_score (index 4) instead of raw count (index 2)
+            songs_matches.append((song_id, best_off, best_count, best_t, final_score))
+
+        # Sort by the final_score (index 4) instead of raw count
         songs_matches.sort(key=lambda x: x[4], reverse=True)
 
         # Build JSON output structure
@@ -265,6 +272,7 @@ class Dejavu:
             raw_sha1 = song.get(FIELD_BLOB_SHA1)
             blob_sha1_str = raw_sha1.hex() if isinstance(raw_sha1, bytes) else str(raw_sha1)
 
+            # Constant: HOP_LENGTH / DEFAULT_FS
             nseconds = round(float(offset) * HOP_LENGTH / DEFAULT_FS, 5)
             total_hashes_in_db = song.get(FIELD_TOTAL_HASHES) or 1
 
@@ -274,7 +282,7 @@ class Dejavu:
                 INPUT_HASHES: queried_hashes,
                 FINGERPRINTED_HASHES: total_hashes_in_db,
                 HASHES_MATCHED: hashes_matched_count,
-                #"SCORE": round(score, 2), # New metric for debugging
+                "SCORE": round(score, 2), 
                 INPUT_CONFIDENCE: hashes_matched_count / queried_hashes,
                 FINGERPRINTED_CONFIDENCE: hashes_matched_count / total_hashes_in_db,
                 DETECTED_TEMPO: round(detected_tempo, 2),
