@@ -17,7 +17,7 @@ def is_fingerprinted(blob, db_config, result_queue):
                 blob_hash = hashlib.sha1(blob).hexdigest()
                 is_fingerprinted_query = f"""
                 SELECT `{FIELD_BLOB_SHA1}` FROM `{SONGS_TABLENAME}`
-                WHERE `{FIELD_BLOB_SHA1}` = '{blob_hash}';
+                WHERE lower({FIELD_BLOB_SHA1}) = lower('{blob_hash}');
                 """
                 result = clickhouse_db_connection.execute(is_fingerprinted_query)
                 if result: # If the submitted track is already fingerprinted, return its hash value
@@ -30,8 +30,8 @@ def is_fingerprinted(blob, db_config, result_queue):
         if mysql_db_connection:
             try:
                 is_fingerprinted_query = f"""
-                SELECT `{FIELD_BLOB_SHA1}` FROM `{SONGS_TABLENAME}`
-                WHERE `{FIELD_BLOB_SHA1}` = UNHEX(%s);
+                    SELECT `{FIELD_BLOB_SHA1}` FROM `{SONGS_TABLENAME}`
+                    WHERE LOWER(`{FIELD_BLOB_SHA1}`) = LOWER(HEX(UNHEX(%s)));
                 """
                 blob_hash = hashlib.sha1(blob).hexdigest()
                 cursor = mysql_db_connection.cursor()
