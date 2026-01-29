@@ -206,7 +206,7 @@ class Dejavu:
 
         # 2. High-Resolution Tempo Grid
         # Increased to 71 steps (approx 0.01 increments) to catch precise speed shifts
-        tempo_scales = np.linspace(0.8, 1.5, 36)
+        tempo_scales = np.linspace(0.8, 1.5, 71)
         scales_grid = tempo_scales[:, np.newaxis] 
         
         candidate_songs = []
@@ -240,7 +240,11 @@ class Dejavu:
 
                 # 3. CONVOLUTIONAL SMOOTHING
                 # This captures 'leaked' matches in neighboring buckets caused by 1.1x interpolation
-                if len(counts) >= 3:
+                if len(counts) >= 5:
+                    smoothed = np.convolve(counts, [0.25, 0.75, 1, 0.75, 0.25], mode='same')
+                    current_max = smoothed.max()
+                    max_idx = smoothed.argmax()
+                elif len(counts) >= 3:
                     smoothed = np.convolve(counts, [0.5, 1, 0.5], mode='same')
                     current_max = smoothed.max()
                     max_idx = smoothed.argmax()
@@ -256,10 +260,11 @@ class Dejavu:
             # 4. INITIAL SCORING
             # Penalize long songs with log10 to prevent 'giant' songs from winning by accident
             song_data = self.db.get_song_by_id(song_id)
+            if not song_data: continue
             total_hashes = song_data.get(FIELD_TOTAL_HASHES) or 1
             
             precision = best_count / len(pairs)
-            score = (best_count * precision) / np.log10(total_hashes + 1)
+            score = (best_count * (precision ** 1.5)) / np.log10(total_hashes + 1)
             
             candidate_songs.append({
                 "song_id": song_id,
