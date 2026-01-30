@@ -65,89 +65,63 @@ def get_2D_peaks(arr2D: np.ndarray, amp_min: int = DEFAULT_AMP_MIN) -> List[Tupl
 
 
 def generate_triplet_hashes(peaks, fan_value=DEFAULT_FAN_VALUE, 
-                                       min_delta_t=MIN_TIME_DELTA, max_delta_t=MAX_TIME_DELTA):
+                            min_delta_t=MIN_TIME_DELTA, max_delta_t=MAX_TIME_DELTA):
     peaks = np.array(peaks)
     n = len(peaks)
     if n < 3: return []
 
-    # Keep your exact types
-    f = peaks[:, 0].astype(np.int32)
+    f = peaks[:, 0].astype(np.uint64)
     t = peaks[:, 1]
 
-    # We use a fixed lookahead window to allow vectorization. 
-    # To ensure we don't miss peaks within max_delta_t, we use a safe buffer.
+    # Increase lookahead locally to ensure we find triplets in dense databases
+    # 40-60 is better for large databases
     lookahead = fan_value * 3 
     
-    # Pad and create sliding window views for all neighbors at once
     f_padded = np.pad(f, (0, lookahead), constant_values=0)
     t_padded = np.pad(t, (0, lookahead), constant_values=np.inf)
 
-    # These matrices are (N, lookahead)
-    # Each row i contains the neighbors for anchor i
     f_neighbors = sliding_window_view(f_padded[1:], window_shape=lookahead)[:n]
     t_neighbors = sliding_window_view(t_padded[1:], window_shape=lookahead)[:n]
 
-    # Vectorized Delta Calculation (Broadcasting)
-    # t[:, None] reshapes t to (N, 1) so it broadcasts against (N, lookahead)
     dt_matrix = t_neighbors - t[:, np.newaxis]
     df_matrix = f_neighbors - f[:, np.newaxis]
-
-    # Create a Validity Mask
-    # This ensures neighbors are within your MIN/MAX constants
-    # 1. Ensure Point 2 is within bounds of Anchor 
-    # 2. Ensure Point 3 is within bounds of Anchor
-    # 3. Ensure Point 3 is strictly AFTER Point 2 (dt32 > 0)
-    m2 = (dt_matrix[:, j] >= min_delta_t) & (dt_matrix[:, j] <= max_delta_t)
-    m3 = (dt_matrix[:, k] >= min_delta_t) & (dt_matrix[:, k] <= max_delta_t)
-    m32 = (dt_matrix[:, k] > dt_matrix[:, j])
-
-    valid_mask = m2 & m3 & m32
 
     all_hashes = []
     all_anchors = []
 
-    # Generate Triplets
-    # Instead of looping over N (songs), we loop over the lookahead depth
-    # This is much faster because fan_value is small (e.g., 20)
     for j in range(lookahead):
-        # Point 2 candidates
-        dt21 = dt_matrix[:, j]
-        df21 = df_matrix[:, j]
-        m2 = valid_mask[:, j]
-
         for k in range(j + 1, lookahead):
-            # Point 3 candidates
+            dt21 = dt_matrix[:, j]
             dt31 = dt_matrix[:, k]
-            df31 = df_matrix[:, k]
-            m3 = valid_mask[:, k]
-
-            # Only process anchors where both neighbor j and k are valid
-            combined_mask = m2 & m3
-            if not np.any(combined_mask):
+            
+            # We allow a slightly larger time window locally to catch 1.4x changes
+            mask = (dt21 >= min_delta_t) & (dt31 <= (max_delta_t * 1.5)) & (dt31 > dt21)
+            
+            if not np.any(mask):
                 continue
 
-            # CONSTANTS & LOGIC:
-            # t_ratios calculation
-            v_dt21 = dt21[combined_mask]
-            v_dt31 = dt31[combined_mask]
-            t_ratios = (v_dt21 / v_dt31 * 1000).astype(np.int32)
-
-            # PACKING LOGIC:
-            v_df21 = df21[combined_mask]
-            v_df31 = df31[combined_mask]
+            v_dt21 = dt21[mask]
+            v_dt31 = dt31[mask]
             
-            # Applying bit-shifts and masks to prevent overflow
-            h = ((t_ratios & 0xFFFF) << 16) | \
-                (((v_df21 + 128) & 0xFF) << 8) | \
-                ((v_df31 + 128) & 0xFF)
+            # 10 bits for Ratio (0-1023)
+            t_ratios = (v_dt21 / v_dt31 * 1024).astype(np.uint64)
+
+            v_df21 = df_matrix[mask, j]
+            v_df31 = df_matrix[mask, k]
+            
+            # PACKING FOR HUGE DATABASES:
+            # We use 32-bit integers: 10 bits ratio, 11 bits df21, 11 bits df31.
+            # Adding 512 handles a wider range of pitch/frequency shifts.
+            h = ((t_ratios & 0x3FF) << 22) | \
+                (((v_df21 + 512) & 0x7FF) << 11) | \
+                ((v_df31 + 512) & 0x7FF)
 
             all_hashes.append(h)
-            all_anchors.append(t[combined_mask].astype(np.int32))
+            all_anchors.append(t[mask].astype(np.uint64))
 
     if not all_hashes:
         return []
 
-    # Final flattening of vectorized blocks
     res_h = np.concatenate(all_hashes)
     res_t = np.concatenate(all_anchors)
 
