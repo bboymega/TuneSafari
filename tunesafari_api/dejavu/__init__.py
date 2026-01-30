@@ -199,12 +199,12 @@ class Dejavu:
                   topn: int = TOPN) -> List[Dict[str, any]]:
         if not matches: return []
 
-        # 1. Group matches by Song ID
+        # Group matches by Song ID
         song_match_pairs = defaultdict(list)
         for sid, db_off, q_off in matches:
             song_match_pairs[sid].append((db_off, q_off))
 
-        # 2. HIGH-RESOLUTION TEMPO GRID
+        # HIGH-RESOLUTION TEMPO GRID
         tempo_scales = np.linspace(0.8, 1.5, 141)
         scales_grid = tempo_scales[:, np.newaxis] 
         
@@ -225,7 +225,6 @@ class Dejavu:
 
             for i, s in enumerate(tempo_scales):
                 diffs = all_diffs[i]
-                # Use a more forgiving bucket for high-speed shifts to prevent peak splitting
                 dynamic_bucket = BUCKET_SIZE * (1.0 + abs(1.0 - s) * 0.6)
                 
                 shifted = (diffs // dynamic_bucket).astype(int)
@@ -249,11 +248,11 @@ class Dejavu:
                     best_off = (max_idx + min_val) * dynamic_bucket
                     best_t = s
 
-            # Calculate Query Coverage: How much of the input audio actually matched?
+            # Calculate initial coverage
             unique_q_hits = len(np.unique(q_offs))
             
-            # PRE-SCORE: Favors absolute match volume
-            base_score = (best_count ** 2) * (best_count / (unique_q_hits + 1))
+            # Initial filter score
+            base_score = (best_count ** 2) * unique_q_hits
             
             candidate_songs.append({
                 "song_id": song_id,
@@ -265,47 +264,60 @@ class Dejavu:
                 "unique_q": unique_q_hits
             })
 
-        # 3. DENSITY-WEIGHTED SNR VERIFICATION
+        # DENSITY-WEIGHTED SNR VERIFICATION
         verified_results = []
+        # Sort candidates to process the most promising ones
         candidate_songs.sort(key=lambda x: x["score"], reverse=True)
-        
+
         for candidate in candidate_songs[:20]:
             t = candidate["tempo"]
             off = candidate["offset"]
             p_np = candidate["pairs"]
             
+            # Re-align
             aligned = p_np[:, 0] - (p_np[:, 1] * t)
             
-            # Strict alignment window
-            peak_mask = np.abs(aligned - off) < (BUCKET_SIZE * 1.5)
+            # Strict window for peak detection
+            peak_mask = np.abs(aligned - off) < (BUCKET_SIZE * 0.5)
             peak_count = np.sum(peak_mask)
             
             if peak_count < 12: continue
             
-            tightness = np.std(aligned[peak_mask])
+            # Precise uniqueness within the peak
+            peak_q_offsets = p_np[peak_mask, 1]
+            unique_q_in_peak = len(np.unique(peak_q_offsets))
             
-            # FINAL POWER SCORE
-            # 1. Cubing peak_count makes the 545 vs 304 gap insurmountable.
-            # 2. Multiplying by unique_q ensures the matches aren't just one looping sound.
-            # 3. Tightness penalty remains to ensure it's a clean line.
-            final_score = (peak_count ** 3 * candidate["unique_q"]) / (max(tightness, 0.001) + 0.8)
+            # Calculate standard deviation (Tightness)
+            tightness = np.std(aligned[peak_mask])
+            tempo_sanity = 1.0 / (1.0 + abs(1.0 - t) * 0.5)
+            purity_ratio = (unique_q_in_peak / peak_count) if peak_count > 0 else 0
+            score_base = (unique_q_in_peak ** 3.5)
+            density_weight = 1.0 / (1.0 + tightness**2)
+            
+            # --- IMPROVED SCORING FORMULA ---
+            # We use log1p to dampen raw count and square the tightness to punish blurry matches
+            final_score = (score_base * purity_ratio * density_weight * tempo_sanity) / 1000
+
+            # Debugging
+            s_name = self.db.get_song_by_id(candidate["song_id"])
+            print(f"DEBUG: {s_name['song_name'][:20]:<20} | Hits: {peak_count:<4} | PeakUnique: {unique_q_in_peak:<4} | Tight: {tightness:.3f} | Score: {final_score:,.0f} | TempoSanity: {tempo_sanity:.3f}")
             
             candidate["score"] = final_score
+            candidate["count"] = peak_count
+            candidate["unique_q"] = unique_q_in_peak
             verified_results.append(candidate)
 
+        # --- SORT BY FINAL SCORE ---
         verified_results.sort(key=lambda x: x["score"], reverse=True)
 
-        # 4. FORMAT OUTPUT
+        # FORMAT OUTPUT
         songs_result = []
+
         for res in verified_results[:topn]:
             sid = res["song_id"]
             song = self.db.get_song_by_id(sid)
             
             nseconds = round(float(res["offset"]) * HOP_LENGTH / DEFAULT_FS / res["tempo"], 5)
-            
-            # Relative confidence across the top results
-            top_scores_sum = sum(c['score'] for c in verified_results[:5])
-            relative_conf = (res["score"] / top_scores_sum) if top_scores_sum > 0 else 0
             
             songs_result.append({
                 SONG_ID: str(sid),
@@ -313,8 +325,8 @@ class Dejavu:
                 INPUT_HASHES: queried_hashes,
                 FINGERPRINTED_HASHES: song.get(FIELD_TOTAL_HASHES) or 1,
                 HASHES_MATCHED: int(res["count"]),
-                INPUT_CONFIDENCE: round(res["count"] / queried_hashes, 5),
-                FINGERPRINTED_CONFIDENCE: round(relative_conf, 5),
+                INPUT_CONFIDENCE: res["count"] / queried_hashes,
+                FINGERPRINTED_CONFIDENCE: res["score"],
                 DETECTED_TEMPO: round(res["tempo"], 2),
                 OFFSET: max(0, int(res["offset"])),
                 OFFSET_SECS: max(0, nseconds),
