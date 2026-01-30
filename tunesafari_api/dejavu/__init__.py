@@ -205,7 +205,7 @@ class Dejavu:
             song_match_pairs[sid].append((db_off, q_off))
 
         # HIGH-RESOLUTION TEMPO GRID
-        tempo_scales = np.linspace(0.8, 1.5, 141)
+        tempo_scales = np.linspace(0.7, 1.4, 71)
         scales_grid = tempo_scales[:, np.newaxis] 
         
         candidate_songs = []
@@ -299,8 +299,8 @@ class Dejavu:
             final_score = (score_base * purity_ratio * density_weight * tempo_sanity) / 1000
 
             # Debugging
-            s_name = self.db.get_song_by_id(candidate["song_id"])
-            print(f"DEBUG: {s_name['song_name'][:20]:<20} | Hits: {peak_count:<4} | PeakUnique: {unique_q_in_peak:<4} | Tight: {tightness:.3f} | Score: {final_score:,.0f} | TempoSanity: {tempo_sanity:.3f}")
+            #s_name = self.db.get_song_by_id(candidate["song_id"])
+            #print(f"DEBUG: {s_name['song_name'][:20]:<20} | Hits: {peak_count:<4} | PeakUnique: {unique_q_in_peak:<4} | Tight: {tightness:.3f} | Score: {final_score:,.0f} | TempoSanity: {tempo_sanity:.3f}")
             
             candidate["score"] = final_score
             candidate["count"] = peak_count
