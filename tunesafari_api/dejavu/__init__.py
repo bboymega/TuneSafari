@@ -20,7 +20,7 @@ from dejavu.config.settings import (DEFAULT_FS, DEFAULT_OVERLAP_RATIO,
                                     FINGERPRINTED_HASHES, HASHES_MATCHED,
                                     INPUT_CONFIDENCE, INPUT_HASHES, OFFSET,
                                     OFFSET_SECS, SONG_ID, SONG_NAME, TOPN, DEFAULT_FAN_VALUE, DEFAULT_AMP_MIN, BUCKET_SIZE, N_BINS, BINS_PER_OCTAVE, HOP_LENGTH, MIN_NOTE,
-                                    MAX_TIME_DELTA, MIN_TIME_DELTA, DETECTED_TEMPO)
+                                    MAX_TIME_DELTA, MIN_TIME_DELTA, DETECTED_TEMPO, NUM_WINDOWS)
 from dejavu.logic.fingerprint import fingerprint
 
 class Dejavu:
@@ -291,16 +291,32 @@ class Dejavu:
             tightness = np.std(aligned[peak_mask])
             tempo_sanity = 1.0 / (1.0 + abs(1.0 - t) * 0.5)
             purity_ratio = (unique_q_in_peak / peak_count) if peak_count > 0 else 0
-            score_base = (unique_q_in_peak ** 3.5)
+            score_base = (unique_q_in_peak ** 2)
             density_weight = 1.0 / (1.0 + tightness**2)
+
+            num_windows = NUM_WINDOWS
+            q_min, q_max = p_np[:, 1].min(), p_np[:, 1].max()
+            window_size = (q_max - q_min) / num_windows
+            active_windows = 0
+
+            for i in range(num_windows):
+                w_start = q_min + (i * window_size)
+                w_end = w_start + window_size
+                hits = np.sum((p_np[peak_mask, 1] >= w_start) & (p_np[peak_mask, 1] < w_end))
+                if hits > 4: # You can even raise this to 8 for more strictness
+                    active_windows += 1
+
+            consistency_multiplier = active_windows / num_windows
+            if active_windows < (num_windows // 2):
+                consistency_multiplier *= 0.1
             
             # --- IMPROVED SCORING FORMULA ---
             # We use log1p to dampen raw count and square the tightness to punish blurry matches
-            final_score = (score_base * purity_ratio * density_weight * tempo_sanity) / 1000
+            final_score = (score_base * purity_ratio * density_weight * tempo_sanity * (consistency_multiplier ** 3))
 
             # Debugging
-            #s_name = self.db.get_song_by_id(candidate["song_id"])
-            #print(f"DEBUG: {s_name['song_name'][:20]:<20} | Hits: {peak_count:<4} | PeakUnique: {unique_q_in_peak:<4} | Tight: {tightness:.3f} | Score: {final_score:,.0f} | TempoSanity: {tempo_sanity:.3f}")
+            s_name = self.db.get_song_by_id(candidate["song_id"])
+            print(f"DEBUG: {s_name['song_name'][:20]:<20} | Hits: {peak_count:<4} | PeakUnique: {unique_q_in_peak:<4} | Tight: {tightness:.3f} | Score: {final_score:,.0f} | TempoSanity: {tempo_sanity:.3f} | consistency_multiplier: {consistency_multiplier:.3f}")
             
             candidate["score"] = final_score
             candidate["count"] = peak_count

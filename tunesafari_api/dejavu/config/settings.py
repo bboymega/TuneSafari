@@ -149,6 +149,9 @@ MIN_TIME_DELTA = 1
 MAX_TIME_DELTA = 180
 BUCKET_SIZE = 25
 
+# Match Alignment
+NUM_WINDOWS = 10
+
 # Binning Config
 N_BINS = 96  # Number of bins
 BINS_PER_OCTAVE = 12
