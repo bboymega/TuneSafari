@@ -31,11 +31,11 @@ This project is under development, core algorithm based on [worldveil/dejavu](ht
 
 This project is composed of three main components: **TuneSafari_api**, **TuneSafari_ui**, and **TuneSafari_uploader**. Below you will find a brief overview of each part, with links to their respective detailed documentation.
 
-### [TuneSafari_api](./TuneSafari_api/README.md)
+### [TuneSafari_api](./tunesafari_api/README.md)
 
 The backend API for handling music recognition, result storage and audio fingerprinting. Built with Python/Flask.
 
-### [TuneSafari_ui](./TuneSafari_ui/README.md)
+### [TuneSafari_ui](./tunesafari_ui/README.md)
 
 The web application serving as the user interface (UI) for the project. Built with Next.js/React.
 
