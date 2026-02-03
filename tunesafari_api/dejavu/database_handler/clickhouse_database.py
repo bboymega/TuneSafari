@@ -135,13 +135,38 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
     def set_song_fingerprinted(self, song_id):
         """
         Sets a specific song as having all fingerprints in the database.
+        Uses the INSERT-as-Update pattern for ReplacingMergeTree.
+        """
+        GET_SONG = f"""
+            SELECT 
+                {FIELD_SONGNAME}, 
+                {FIELD_BLOB_SHA1}, 
+                {FIELD_TOTAL_HASHES} 
+            FROM `{SONGS_TABLENAME}` FINAL 
+            WHERE `{FIELD_SONG_ID}` = %(sid)s
+        """
+        sid = uuid.UUID(song_id) if isinstance(song_id, str) else song_id
+        result = self.client.execute(GET_SONG, {'sid': sid})
+        if not result:
+            return  # Song not found
+        song_name, blob_sha1, total_hashes = result[0]
 
-        :param song_id: song identifier.
+        UPSERT_QUERY = f"""
+            INSERT INTO `{SONGS_TABLENAME}` 
+            (`{FIELD_SONG_ID}`, `{FIELD_SONGNAME}`, `{FIELD_FINGERPRINTED}`, 
+            `{FIELD_BLOB_SHA1}`, `{FIELD_TOTAL_HASHES}`, `date_modified`) 
+            VALUES
         """
-        UPDATE_SONG_FINGERPRINTED = f"""
-            UPDATE `{SONGS_TABLENAME}` SET `{FIELD_FINGERPRINTED}` = 1 WHERE `{FIELD_SONG_ID}` = '{song_id}';
-        """
-        self.client.execute(UPDATE_SONG_FINGERPRINTED)
+        data = [(
+            sid, 
+            song_name, 
+            1,               # The update: fingerprinted = 1
+            blob_sha1, 
+            total_hashes, 
+            datetime.now()
+        )]
+
+        self.client.execute(UPSERT_QUERY, data)
         
     def get_songs(self) -> List[Dict[str, str]]:
         """
@@ -164,7 +189,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
             `{FIELD_SONGNAME}`,
             `{FIELD_BLOB_SHA1}` AS `{FIELD_BLOB_SHA1}`,
             `{FIELD_TOTAL_HASHES}`
-            FROM `{SONGS_TABLENAME}`
+            FROM `{SONGS_TABLENAME}` FINAL
             WHERE `{FIELD_SONG_ID}` = '{song_id}';
         """
         result = self.client.execute(SELECT_SONG)
@@ -187,13 +212,13 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
         """
         INSERT_FINGERPRINT = f"""
             INSERT INTO `{FINGERPRINTS_TABLENAME}` (
-            `{FIELD_SONG_ID}`,
             `{FIELD_HASH}`,
+            `{FIELD_SONG_ID}`,
             `{FIELD_OFFSET}`
             )
             VALUES
         """
-        self.client.execute(INSERT_FINGERPRINT, [(song_id, fingerprint, offset)])
+        self.client.execute(INSERT_FINGERPRINT, [(fingerprint, song_id, offset)])
 
     @abc.abstractmethod
     def insert_song(self, song_name: str, file_hash: str, total_hashes: int) -> int:
@@ -245,14 +270,14 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
         :param batch_size: insert batches.
         """
         # Prepare values to insert
-        values = [(song_id, hsh, int(offset)) for hsh, offset in hashes]
+        values = [(hsh, song_id, int(offset)) for hsh, offset in hashes]
 
         # Batch insert the values
         for index in range(0, len(values), batch_size):
             INSERT_FINGERPRINT = f"""
                 INSERT INTO `{FINGERPRINTS_TABLENAME}` (
-                `{FIELD_SONG_ID}`,
                 `{FIELD_HASH}`,
+                `{FIELD_SONG_ID}`,
                 `{FIELD_OFFSET}`
                 )
                 VALUES
@@ -288,7 +313,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
             if self.redis_client:
                 pipe = self.redis_client.pipeline()
                 for hsh in current_batch:
-                    pipe.get(f"{self.prefix}:{hsh.lower()}")
+                    pipe.get(f"{self.prefix}:{hsh}")
                 redis_responses = pipe.execute()
 
                 for hsh, raw_data in zip(current_batch, redis_responses):
@@ -311,12 +336,13 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
 
             sql_block = np.empty((0, 3), dtype=object)
             if cache_misses:
+                clean_hashes = [int(h) for h in cache_misses]
                 SELECT_MULTIPLE = f"""
                     SELECT `{FIELD_HASH}`, `{FIELD_SONG_ID}`, `{FIELD_OFFSET}`
                     FROM `{FINGERPRINTS_TABLENAME}`
-                    WHERE `{FIELD_HASH}` IN ({', '.join([repr(h.lower()) for h in cache_misses])});
+                    WHERE `{FIELD_HASH}` IN %(hashes)s
                 """
-                sql_results = self.client.execute(SELECT_MULTIPLE)
+                sql_results = self.client.execute(SELECT_MULTIPLE, {'hashes': clean_hashes})
                 
                 if sql_results:
                     sql_block = np.array(sql_results, dtype=object)
@@ -330,7 +356,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
                         write_pipe = self.redis_client.pipeline()
                         for h_key, group in zip(unq_h, groups):
                             # Cache only [sid, offset]
-                            redis_key = f"{self.prefix}:{h_key.lower()}"
+                            redis_key = f"{self.prefix}:{h_key}"
                             write_pipe.setex(redis_key, 86400, pickle.dumps(group[:, [1, 2]].tolist()))
                         write_pipe.execute()
 
@@ -395,34 +421,31 @@ class ClickhouseDatabase(Query):
     # CREATES
     CREATE_SONGS_TABLE = f"""
         CREATE TABLE IF NOT EXISTS `{SONGS_TABLENAME}` (
-        `{FIELD_SONG_ID}` UUID NOT NULL DEFAULT generateUUIDv4(),
-        `{FIELD_SONGNAME}` String NOT NULL,
-        `{FIELD_FINGERPRINTED}` Int8 DEFAULT 0,
-        `{FIELD_BLOB_SHA1}` FixedString(40) NOT NULL,
-        `{FIELD_TOTAL_HASHES}` Int32 NOT NULL DEFAULT 0,
-        `date_created` DateTime DEFAULT now(),
-        `date_modified` DateTime DEFAULT now(),
+            `{FIELD_SONG_ID}` UUID DEFAULT generateUUIDv4(),
+            `{FIELD_SONGNAME}` LowCardinality(String),
+            `{FIELD_FINGERPRINTED}` UInt8 DEFAULT 0,
+            `{FIELD_BLOB_SHA1}` FixedString(40),
+            `{FIELD_TOTAL_HASHES}` UInt32 DEFAULT 0 CODEC(T64, LZ4),
+            `date_created` DateTime64(3) DEFAULT now64() CODEC(DoubleDelta, LZ4),
+            `date_modified` DateTime64(3) DEFAULT now64() CODEC(DoubleDelta, LZ4)
         ) 
-        ENGINE = MergeTree()
-        PARTITION BY toYYYYMM(date_created)
+        ENGINE = ReplacingMergeTree(date_modified)
         ORDER BY `{FIELD_SONG_ID}`
-        SETTINGS enable_block_number_column = 1, enable_block_offset_column = 1;
-    """
+        SETTINGS index_granularity = 8192;
+        """
     
     CREATE_FINGERPRINTS_TABLE = f"""
         CREATE TABLE IF NOT EXISTS `{FINGERPRINTS_TABLENAME}` (
-        `{FIELD_HASH}` FixedString(25) NOT NULL,
-        `{FIELD_SONG_ID}` UUID NOT NULL,
-        `{FIELD_OFFSET}` UInt32 NOT NULL,
-        `date_created` DateTime DEFAULT now(),
-        `date_modified` DateTime DEFAULT now()
+            `{FIELD_HASH}` UInt64 CODEC(Delta, LZ4),
+            `{FIELD_SONG_ID}` UUID,
+            `{FIELD_OFFSET}` UInt32 CODEC(DoubleDelta, LZ4),
+            `date_created` DateTime64(3) DEFAULT now64() CODEC(DoubleDelta, LZ4)
         ) 
         ENGINE = MergeTree()
-        PARTITION BY toYYYYMM(date_created)
-        ORDER BY (`{FIELD_HASH}`, `{FIELD_SONG_ID}`, `{FIELD_OFFSET}`)
-        SETTINGS enable_block_number_column = 1, enable_block_offset_column = 1;
-    """
-    
+        ORDER BY (`{FIELD_HASH}`, `{FIELD_SONG_ID}`)
+        PARTITION BY tuple()
+        SETTINGS index_granularity = 8192;
+        """
 
     # SELECTS
     SELECT = f"""
@@ -449,7 +472,7 @@ class ClickhouseDatabase(Query):
 
     SELECT_UNIQUE_SONG_IDS = f"""
         SELECT COUNT(`{FIELD_SONG_ID}`) AS n
-        FROM `{SONGS_TABLENAME}`
+        FROM `{SONGS_TABLENAME}` FINAL
         WHERE `{FIELD_FINGERPRINTED}` = 1;
     """
 
@@ -460,7 +483,7 @@ class ClickhouseDatabase(Query):
         `{FIELD_BLOB_SHA1}` AS `{FIELD_BLOB_SHA1}`,
         `{FIELD_TOTAL_HASHES}`,
         `date_created`
-        FROM `{SONGS_TABLENAME}`
+        FROM `{SONGS_TABLENAME}` FINAL
         WHERE `{FIELD_FINGERPRINTED}` = 1;
     """
 
@@ -507,7 +530,7 @@ class ClickhouseDatabase(Query):
 
             SELECT_SONG_ID = f"""
                 SELECT `{FIELD_SONG_ID}`
-                FROM `{SONGS_TABLENAME}`
+                FROM `{SONGS_TABLENAME}` FINAL
                 WHERE `{FIELD_SONGNAME}` = '{song_name}' AND `{FIELD_BLOB_SHA1}` = '{file_hash}'
                 ORDER BY `{FIELD_SONG_ID}` DESC
                 LIMIT 1

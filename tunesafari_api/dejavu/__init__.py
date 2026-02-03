@@ -78,7 +78,7 @@ class Dejavu:
         fingerprint_time = time() - t
         return hashes, fingerprint_time
 
-    def find_matches(self, hashes: List[Tuple[str, int]]) -> Tuple[List[Tuple[int, int]], Dict[str, int], float]:
+    def find_matches(self, hashes: List[Tuple[int, int]]) -> Tuple[List[Tuple[int, int]], Dict[str, int], float]:
         """
         Finds the corresponding matches on the fingerprinted audios for the given hashes.
 
@@ -92,7 +92,7 @@ class Dejavu:
         query_time = time() - t
         return matches, dedup_hashes, query_time
 
-    def align_matches(self, matches: List[Tuple[int, int]], dedup_hashes: Dict[str, int], queried_hashes: int,
+    def align_matches(self, matches: List[Tuple[int, int]], dedup_hashes: Dict[int, int], queried_hashes: int,
                       topn: int = TOPN) -> List[Dict[str, any]]:
         """
         Finds hash matches that align in time with other matches and finds

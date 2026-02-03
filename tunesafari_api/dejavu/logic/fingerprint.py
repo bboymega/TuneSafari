@@ -120,52 +120,38 @@ def get_2D_peaks(arr2D: np.array, plot: bool = False, amp_min: int = DEFAULT_AMP
     
 
 def generate_hashes(peaks, fan_value=DEFAULT_FAN_VALUE):
-    #1. Numpy quick sort
     peaks = np.asarray(peaks)
-
     if PEAK_SORT:
         peaks = peaks[np.argsort(peaks[:, 1], kind='quicksort')]
 
-    
-    freqs = peaks[:, 0].astype(int)
-    times = peaks[:, 1].astype(int)
-
+    freqs = peaks[:, 0].astype(np.uint64)
+    times = peaks[:, 1].astype(np.uint64)
     n = len(peaks)
 
-    # Build index matrices exactly matching the Python loop order
+    # 1. Generate indices and offsets
     i_idx = np.arange(n).reshape(n, 1)
-    i_idx = np.repeat(i_idx, fan_value - 1, axis=1)
-
     j_offsets = np.arange(1, fan_value)
     j_idx = i_idx + j_offsets
 
-    # mask for valid j < n
+    # 2. Create and apply the boundary mask
     valid = j_idx < n
-
-    # Flatten valid pairs in row-major order (matches nested loops)
-    i_valid = i_idx[valid]
-    j_valid = j_idx[valid]
-
-    # Compute deltas
-    t1 = times[i_valid]
-    t2 = times[j_valid]
+    i_idx_expanded = np.broadcast_to(i_idx, j_idx.shape)
+    
+    i_v = i_idx_expanded[valid]
+    j_v = j_idx[valid]
+    
+    # 3. Time Delta constraints
+    t1, t2 = times[i_v], times[j_v]
     t_delta = t2 - t1
-
-    # Apply delta constraints
     mask = (t_delta >= MIN_HASH_TIME_DELTA) & (t_delta <= MAX_HASH_TIME_DELTA)
+    
+    # 4. Final selection and Packing
+    f1 = freqs[i_v[mask]]
+    f2 = freqs[j_v[mask]]
+    dt = t_delta[mask].astype(np.uint64)
+    t1_final = t1[mask].astype(np.uint32)
 
-    i_final = i_valid[mask]
-    j_final = j_valid[mask]
-    t1_final = t1[mask]
-    t_delta_final = t_delta[mask]
+    # Pack: [F1: 20 bits] [F2: 20 bits] [Delta: 24 bits]
+    packed_hashes = (f1 << 44) | (f2 << 24) | dt
 
-    # Produce hashes in exact original order
-    hashes = []
-    for i, j, t1_val, dt_val in zip(i_final, j_final, t1_final, t_delta_final):
-        freq1 = int(freqs[i])
-        freq2 = int(freqs[j])
-        h = hashlib.sha1(f"{freq1}|{freq2}|{dt_val}".encode("utf-8"))
-        hashes.append((h.hexdigest()[:FINGERPRINT_REDUCTION], int(t1_val)))
-
-    return hashes
-
+    return list(zip(packed_hashes, t1_final))
