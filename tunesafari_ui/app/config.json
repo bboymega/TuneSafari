@@ -1,0 +1,21 @@
+{
+    "maxDuration": 10,
+    "apiBaseUrl": "http://api.example.com/",
+    "appName": "TuneSafari",
+    "appLabel": "Find the Tracks That Sticks",
+    "title": "Find the tracks that sticks",
+    "description": "TuneSafari - Find the tracks that sticks",
+    "keywords": ["TuneSafari", "Music Recognition"],
+    "themeColor": "#190f13",
+    "externalLink": [
+        {
+            "title": "TuneSafari Github Repo",
+            "url": "https://github.com/bboymega/TuneSafari"
+        },
+        {
+            "title": "Bug Report / Feature Request",
+            "url": "https://github.com/bboymega/TuneSafari/issues"
+        }
+    ],
+    "linkColor": "#d2d9df"
+}

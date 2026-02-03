@@ -62,7 +62,7 @@ try:
     user = redis_conf.get("user", "")
     password = redis_conf.get("password", "")
     port = redis_conf.get("port", 6379)
-    prefix = redis_conf.get("prefix", "TuneScout")
+    prefix = redis_conf.get("prefix", "TuneSafari")
     db_index = config_data.get("rate_limit", {}).get("redis_db_index", random.randint(0, 15))
     limiter = Limiter(
         get_remote_address,
@@ -71,7 +71,7 @@ try:
         storage_options={"key_prefix": prefix}
     )
 except Exception as e:
-    sys.stderr.write(f"\033[33m{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} TuneScout \"WARNING: Redis Connection Warning: {e}. Falling back to in-memory mode for rate limiting\"\033[0m\n")
+    sys.stderr.write(f"\033[33m{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} TuneSafari \"WARNING: Redis Connection Warning: {e}. Falling back to in-memory mode for rate limiting\"\033[0m\n")
     limiter = Limiter(
         key_func=get_remote_address,
         app=app,
@@ -80,7 +80,7 @@ except Exception as e:
 
 def init():
     try:
-        print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} TuneScout \"INFO: Initializing TuneScout\"")
+        print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} TuneSafari \"INFO: Initializing TuneSafari\"")
         init_all_storage_db()
         with open(config_file) as f:
             config = json.load(f)
@@ -92,7 +92,7 @@ def init():
                         instances.append(djv_item)
                 except Exception as e:
                     sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
-        print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} TuneScout \"INFO: worker is ready to accept requests\"")
+        print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} TuneSafari \"INFO: worker is ready to accept requests\"")
     except Exception as e:
         sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
 

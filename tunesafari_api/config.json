@@ -20,7 +20,7 @@
     "fingerprinting": "10 per second",
     "redis_db_index": 0
   },
-  "allowed_origin": ["http://127.0.0.1:3000", "*"],
+  "allowed_origin": ["http://example.com", "*"],
   "instances": [
     {
       "database": {
