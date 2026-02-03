@@ -136,10 +136,5 @@ MAX_HASH_TIME_DELTA = 200
 # affect performance.
 PEAK_SORT = True
 
-# Number of bits to grab from the front of the SHA1 hash in the
-# fingerprint calculation. The more you grab, the more memory storage,
-# with potentially lesser collisions of matches.
-FINGERPRINT_REDUCTION = 20
-
 # Number of results being returned for file recognition
 TOPN = 3

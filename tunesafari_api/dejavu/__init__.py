@@ -110,7 +110,10 @@ class Dejavu:
         counts = [(*key, len(list(group))) for key, group in groupby(sorted_matches, key=lambda m: (m[0], m[1]))]
         songs_matches = sorted(
             [max(list(group), key=lambda g: g[2]) for key, group in groupby(counts, key=lambda count: count[0])],
-            key=lambda count: count[2], reverse=True
+            # Primary: Alignment count
+            # Secondary: Deduplicated matches for that song id
+            key=lambda g: (g[2], dedup_hashes.get(g[0], 0)), 
+            reverse=True
         )
         
         songs_result = []

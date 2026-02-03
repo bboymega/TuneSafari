@@ -12,8 +12,7 @@ from scipy.ndimage.morphology import (binary_erosion,
 
 from dejavu.config.settings import (CONNECTIVITY_MASK, DEFAULT_AMP_MIN,
                                     DEFAULT_FAN_VALUE, DEFAULT_FS,
-                                    DEFAULT_OVERLAP_RATIO, DEFAULT_WINDOW_SIZE,
-                                    FINGERPRINT_REDUCTION, MAX_HASH_TIME_DELTA,
+                                    DEFAULT_OVERLAP_RATIO, DEFAULT_WINDOW_SIZE, MAX_HASH_TIME_DELTA,
                                     MIN_HASH_TIME_DELTA,
                                     PEAK_NEIGHBORHOOD_SIZE, PEAK_SORT)
 
@@ -122,7 +121,7 @@ def get_2D_peaks(arr2D: np.array, plot: bool = False, amp_min: int = DEFAULT_AMP
 def generate_hashes(peaks, fan_value=DEFAULT_FAN_VALUE):
     peaks = np.asarray(peaks)
     if PEAK_SORT:
-        peaks = peaks[np.argsort(peaks[:, 1], kind='quicksort')]
+        peaks = peaks[np.argsort(peaks[:, 1], kind='stable')]
 
     freqs = peaks[:, 0].astype(np.uint64)
     times = peaks[:, 1].astype(np.uint64)

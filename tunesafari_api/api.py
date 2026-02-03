@@ -7,7 +7,7 @@ import string
 from datetime import datetime
 from dejavu import Dejavu
 from dejavu.base_classes.jsonify_binary_data import jsonify_binary
-from dejavu.config.settings import (CONFIG_FILE, DEFAULT_FS)
+from dejavu.config.settings import (CONFIG_FILE, DEFAULT_FS, HASHES_MATCHED, FINGERPRINTED_CONFIDENCE)
 from dejavu.database_handler.result_storage import init_all_storage_db, store_result, search_result_all, if_result_token_exist_all
 from pathlib import Path
 from io import BytesIO
@@ -253,7 +253,7 @@ def recognize_api():
         
         results_array = sorted(
             results_array,
-            key=lambda x: (x['fingerprinted_confidence'], x['input_confidence']),
+            key=lambda x: (x[HASHES_MATCHED], x[FINGERPRINTED_CONFIDENCE]),
             reverse=True
         )
         
