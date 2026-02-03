@@ -20,6 +20,8 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import traceback
+import tempfile
+import os
 
 config_file = CONFIG_FILE if CONFIG_FILE not in [None, '', 'config.json'] else 'config.json'
 
@@ -180,16 +182,26 @@ def recognize_api():
                             duration = max_duration * 1.0
 
                     if max_duration > 0:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_data:
+                            temp_data.write(blob)
+                            temp_data_path = temp_data.name
                         try:
-                            blob = ffmpeg.input('pipe:0', ss=start_time, t=duration) \
+                            blob, err = ffmpeg.input(temp_data_path, ss=start_time, t=duration) \
+                            .filter('loudnorm', I=-16, TP=-1.5, LRA=11) \
                             .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=1, sample_fmt='s16') \
-                            .run(input=blob, capture_stdout=True, capture_stderr=True)[0]
+                            .run(capture_stdout=True, capture_stderr=True)
+                            if not blob or len(blob) < 100:
+                                sys.stderr.write("\033[31m" + "ERROR: FFmpeg returned empty audio data: " + err.decode() + "\033[0m\n")
+                                return jsonify({"status": "error", "message": "Extracted audio is empty"}), 400
                         except Exception as e:
-                            sys.stderr.write("\033[31m" + f"{datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')} {request.remote_addr} \"ERROR: Failed to process input file\"" + "\033[0m\n")
+                            sys.stderr.write("\033[31m" + f"{datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')} {request.remote_addr} \"ERROR: Failed to process input file {e}\"" + "\033[0m\n")
                             return jsonify({
                                 "status": "error",
                                 "message": "Failed to process input file"
                             }), 500
+                        finally:
+                            if os.path.exists(temp_data_path):
+                                os.remove(temp_data_path)
                     else:
                         convert_only = True
                 else:
@@ -197,6 +209,9 @@ def recognize_api():
             else:
                 convert_only = True
         if convert_only:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_data:
+                temp_data.write(blob)
+                temp_data_path = temp_data.name
             try:
                 if request.form.get('start'):
                     start_time = float(request.form.get('start'))
@@ -205,20 +220,31 @@ def recognize_api():
                 
                 if request.form.get('duration'):
                     duration = float(request.form.get('duration'))
-                    blob = ffmpeg.input('pipe:0', ss=start_time, t=duration) \
+                    blob, err = ffmpeg.input(temp_data_path, ss=start_time, t=duration) \
+                    .filter('loudnorm', I=-16, TP=-1.5, LRA=11) \
                     .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=1, sample_fmt='s16') \
-                    .run(input=blob, capture_stdout=True, capture_stderr=True)[0]
+                    .run(capture_stdout=True, capture_stderr=True)
+                    if not blob or len(blob) == 0:
+                        sys.stderr.write("\033[31m" + "ERROR: FFmpeg returned empty audio data: " + err.decode() + "\033[0m\n")
+                        return jsonify({"status": "error", "message": "Extracted audio is empty"}), 400
                 else:
-                    blob = ffmpeg.input('pipe:0', ss=start_time) \
+                    blob, err = ffmpeg.input(temp_data_path, ss=start_time) \
+                    .filter('loudnorm', I=-16, TP=-1.5, LRA=11) \
                     .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=1, sample_fmt='s16') \
-                    .run(input=blob, capture_stdout=True, capture_stderr=True)[0]
+                    .run(capture_stdout=True, capture_stderr=True)
+                    if not blob or len(blob) < 100:
+                        sys.stderr.write("\033[31m" + "ERROR: FFmpeg returned empty audio data: " + err.decode() + "\033[0m\n")
+                        return jsonify({"status": "error", "message": "Extracted audio is empty"}), 400
 
             except Exception as e:
-                sys.stderr.write("\033[31m" + f"{datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')} {request.remote_addr} \"ERROR: Failed to process input file\"" + "\033[0m\n")
+                sys.stderr.write("\033[31m" + f"{datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')} {request.remote_addr} \"ERROR: Failed to process input file {e}\"" + "\033[0m\n")
                 return jsonify({
                     "status": "error",
                     "message": "Failed to process input file"
                 }), 500
+            finally:
+                if os.path.exists(temp_data_path):
+                    os.remove(temp_data_path)
         
         results = recognize_all(blob)
         results_array = [] # Here stores the results
@@ -336,15 +362,22 @@ def fingerprint_api():
 
             # convert audio to standard wav before sampling
             try:
-                blob = ffmpeg.input('pipe:0') \
-                .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=2, sample_fmt='s16') \
-                .run(input=blob, capture_stdout=True, capture_stderr=True)[0]
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_data:
+                    temp_data.write(blob)
+                    temp_data_path = temp_data.name
+                blob, err = ffmpeg.input(temp_data_path) \
+                .filter('loudnorm', I=-16, TP=-1.5, LRA=11) \
+                .output('pipe:1', format='wav', ar=DEFAULT_FS, ac=1, sample_fmt='s16') \
+                .run(capture_stdout=True, capture_stderr=True)
             except Exception as e:
-                sys.stderr.write("\033[31m" + f"{datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')} {request.remote_addr} \"ERROR: Failed to process input file\"" + "\033[0m\n")
+                sys.stderr.write("\033[31m" + f"{datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')} {request.remote_addr} \"ERROR: Failed to process input file {e}\"" + "\033[0m\n")
                 return jsonify({
                     "status": "error",
                     "message": "Failed to process input file"
                 }), 500
+            finally:
+                if os.path.exists(temp_data_path):
+                    os.remove(temp_data_path)
 
             # Obtain filename
             file_path_obj = Path(uploaded_filename)
