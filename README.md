@@ -1,5 +1,5 @@
 ## About
-TuneScout is a scalable music fingerprinting and recognition system featuring multi-processing, multi-instance support, memory caching, media trimming and API integration.
+TuneSafari is a scalable music fingerprinting and recognition system featuring multi-processing, multi-instance support, memory caching, media trimming and API integration.
 
 This project is under development, core algorithm based on [worldveil/dejavu](https://github.com/worldveil/dejavu), which is licensed under the MIT License.
 
@@ -29,17 +29,17 @@ This project is under development, core algorithm based on [worldveil/dejavu](ht
 
 ## Documentation & Deployment
 
-This project is composed of three main components: **tunescout_api**, **tunescout_ui**, and **tunescout_uploader**. Below you will find a brief overview of each part, with links to their respective detailed documentation.
+This project is composed of three main components: **TuneSafari_api**, **TuneSafari_ui**, and **TuneSafari_uploader**. Below you will find a brief overview of each part, with links to their respective detailed documentation.
 
-### [tunescout_api](./tunescout_api/README.md)
+### [TuneSafari_api](./TuneSafari_api/README.md)
 
 The backend API for handling music recognition, result storage and audio fingerprinting. Built with Python/Flask.
 
-### [tunescout_ui](./tunescout_ui/README.md)
+### [TuneSafari_ui](./TuneSafari_ui/README.md)
 
 The web application serving as the user interface (UI) for the project. Built with Next.js/React.
 
-### tunescout_uploader
+### TuneSafari_uploader
 
 The uploader module for handling the upload of audio data. Uploaded data is processed by the backend API with audio fingerprints stored in the database. This module can be run locally and is built with HTML/JavaScript.
 

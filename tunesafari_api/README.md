@@ -1,16 +1,16 @@
-## TuneScout API Deployment
+## TuneSafari API Deployment
 
-You can use Docker to easily deploy the TuneScout API server.
+You can use Docker to easily deploy the TuneSafari API server.
 
 Simply pull the docker image:
 ```
-docker pull bboymega/tunescout_api:v1.0.0
+docker pull bboymega/TuneSafari_api:v1.0.0
 ```
 Prepare your `config.json`. Create your configuration file based on the example provided at the end of this readme.
 
 Spin up a container with the following command:
 ```
-docker run -d -p 8000:80 -v /path/to/your/config.json:/app/config.json bboymega/tunescout_api:v1.0.0
+docker run -d -p 8000:80 -v /path/to/your/config.json:/app/config.json bboymega/TuneSafari_api:v1.0.0
 ```
 
 **FOR PRODUCTION**: Set up a reverse proxy using Apache2 or Nginx to expose the endpoints securely through HTTPS.
@@ -97,7 +97,7 @@ Parameters:
 header = { 'Authorization': f'Bearer 12345' }
 files = {'file': (f.name, f, mime_type)}
 ```
-- **Alternative Method**: You can also use the `tunescout_uploader` to upload audio samples for fingerprinting.
+- **Alternative Method**: You can also use the `TuneSafari_uploader` to upload audio samples for fingerprinting.
 
 Response:
 
@@ -111,7 +111,7 @@ Response:
 ## Configuration Files
 
 ### ./dejavu/config/settings.py
-This file serves as the master settings file for the TuneScout music recognition system. It controls key configuration aspects, including the path to the database configuration file (default: `./config.json`) and various fine-tuning parameters for both the fingerprinting and recognition processes.
+This file serves as the master settings file for the TuneSafari music recognition system. It controls key configuration aspects, including the path to the database configuration file (default: `./config.json`) and various fine-tuning parameters for both the fingerprinting and recognition processes.
 - Default value for configuration file: `CONFIG_FILE = config.json`
 
 ### config.json
@@ -167,7 +167,7 @@ Configuring the allowed sources that are allowed to access the API endpoints via
 
 `instances`:
 
-Configuring the distributed set of audio fingerprinting database instances. Each instance defines a specific database configuration that the TuneScout system will connect to for storing and retrieving fingerprint audio data.
+Configuring the distributed set of audio fingerprinting database instances. Each instance defines a specific database configuration that the TuneSafari system will connect to for storing and retrieving fingerprint audio data.
 
 - `database`:
 
@@ -184,7 +184,7 @@ Configuring the distributed set of audio fingerprinting database instances. Each
 
 `results`:
 
-Configuring the distributed set of result storage database instances. Each instance defines a specific database configuration that the TuneScout system will connect to for storing and retrieving recognition results.
+Configuring the distributed set of result storage database instances. Each instance defines a specific database configuration that the TuneSafari system will connect to for storing and retrieving recognition results.
 
 - `database`:
 
