@@ -202,7 +202,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
         # Since we only want one song, return the first row (if available), else None
         return result_dict if result_dict else {}
 
-    def insert(self, fingerprint: str, song_id, offset: int):
+    def insert(self, fingerprint: int, song_id, offset: int):
         """
         Inserts a single fingerprint into the database.
 
@@ -233,7 +233,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
         """
         pass
     
-    def query(self, fingerprint: str = None) -> List[Tuple]:
+    def query(self, fingerprint: int = None) -> List[Tuple]:
         """
         Returns all matching fingerprint entries associated with
         the given hash as parameter, if None is passed it returns all entries.
