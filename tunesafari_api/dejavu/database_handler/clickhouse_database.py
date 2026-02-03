@@ -259,7 +259,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
         """
         return self.query(None)
     
-    def insert_hashes(self, song_id, hashes: List[Tuple[str, int]], batch_size: int = 1000) -> None:
+    def insert_hashes(self, song_id, hashes: List[Tuple[int, int]], batch_size: int = 1000) -> None:
         """
         Insert a multitude of fingerprints.
 
@@ -284,7 +284,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
             """
             self.client.execute(INSERT_FINGERPRINT, values[index: index + batch_size])
     
-    def return_matches(self, hashes: List[Tuple[str, int]], batch_size: int = 1000) -> Tuple[List[Tuple[int, int]], Dict[str, int]]:
+    def return_matches(self, hashes: List[Tuple[int, int]], batch_size: int = 1000) -> Tuple[List[Tuple[int, int]], Dict[int, int]]:
         """
         Searches Redis (cache) then ClickHouse (fallback). 
         Uses NumPy for result expansion and fixes the NoneType dedup_hashes error.
@@ -302,7 +302,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
         values = list(mapper.keys())
         all_sids_flat = []
         all_offsets_diff_flat = []
-        dedup_hashes: Dict[str, int] = {}
+        dedup_hashes: Dict[int, int] = {}
 
         for index in range(0, len(values), batch_size):
             current_batch = values[index: index + batch_size]

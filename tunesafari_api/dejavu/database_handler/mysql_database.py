@@ -50,6 +50,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
                 redis_kwargs["password"] = password
                 
             self.redis_pool = redis.ConnectionPool(**redis_kwargs)
+            self.redis_client = redis.Redis(connection_pool=self.redis_pool)
             self.redis_client.ping()
         except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
             sys.stderr.write(f"\033[33m{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} TuneScout \"WARNING: Redis Connection Warning: {e}. Falling back to SQL only mode for recognition\"\033[0m\n")
@@ -173,7 +174,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
         :param offset: The offset this fingerprint is from.
         """
         with self.cursor() as cur:
-            cur.execute(self.INSERT_FINGERPRINT, (song_id, fingerprint, int(offset)))
+            cur.execute(self.INSERT_FINGERPRINT, (int(fingerprint), song_id, int(offset)))
 
     @abc.abstractmethod
     def insert_song(self, song_name: str, file_hash: str, total_hashes: int) -> int:
@@ -188,7 +189,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
         """
         pass
 
-    def query(self, fingerprint: str = None) -> List[Tuple]:
+    def query(self, fingerprint: int = None) -> List[Tuple]:
         """
         Returns all matching fingerprint entries associated with
         the given hash as parameter, if None is passed it returns all entries.
@@ -211,7 +212,7 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
         """
         return self.query(None)
 
-    def insert_hashes(self, song_id, hashes: List[Tuple[str, int]], batch_size: int = 1000) -> None:
+    def insert_hashes(self, song_id, hashes: List[Tuple[int, int]], batch_size: int = 1000) -> None:
         """
         Insert a multitude of fingerprints.
 
@@ -221,12 +222,12 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
             - offset: Offset this hash was created from/at.
         :param batch_size: insert batches.
         """
-        values = [(song_id, hsh, int(offset)) for hsh, offset in hashes]
+        values = [(int(hsh), song_id, int(offset)) for hsh, offset in hashes]
         with self.cursor() as cur:
             for index in range(0, len(hashes), batch_size):
                 cur.executemany(self.INSERT_FINGERPRINT, values[index: index + batch_size])
 
-    def return_matches(self, hashes: List[Tuple[str, int]], batch_size: int = 1000) -> Tuple[List[Tuple[int, int]], Dict[str, int]]:
+    def return_matches(self, hashes: List[Tuple[int, int]], batch_size: int = 1000) -> Tuple[List[Tuple[int, int]], Dict[int, int]]:
         """
         Searches Redis (cache) then MySQL (fallback). 
         Uses NumPy for vectorized result expansion and offset broadcasting.
@@ -234,10 +235,10 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
         # 1. Prepare Data for Query (Mapping input hashes to their offsets)
         mapper = {}
         for hsh, offset in hashes:
-            hsh_upper = hsh.upper() 
-            if hsh_upper not in mapper:
-                mapper[hsh_upper] = []
-            mapper[hsh_upper].append(offset)
+            h_int = int(hsh) # Ensure hash is an int for mapping
+            if h_int not in mapper:
+                mapper[h_int] = []
+            mapper[h_int].append(offset)
         
         for hsh in mapper:
             mapper[hsh] = np.array(mapper[hsh], dtype=np.int64)
@@ -245,34 +246,36 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
         values = list(mapper.keys())
         all_sids_flat = []
         all_offsets_diff_flat = []
-        dedup_hashes: Dict[str, int] = {}
+        dedup_hashes: Dict[int, int] = {}
 
         for index in range(0, len(values), batch_size):
             current_batch = values[index: index + batch_size]
             
-            # Check Redis Cache
             hit_blocks = []
             cache_misses = []
+            
+            # Check Redis Cache
             if self.redis_client:
                 pipe = self.redis_client.pipeline()
                 for hsh in current_batch:
-                    pipe.get(f"{self.prefix}:{hsh.upper()}")
+                    pipe.get(f"{self.prefix}:{hsh}")
                 redis_responses = pipe.execute()
 
                 for hsh, raw_data in zip(current_batch, redis_responses):
                     if raw_data:
                         m_list = pickle.loads(raw_data)
                         if m_list:
-                            # Convert to numpy array [sid, offset]
-                            m = np.array(m_list, dtype=object) 
-                            # Add the hash column back to match SQL output shape: [hash, sid, offset]
-                            h_col = np.full((m.shape[0], 1), hsh)
+                            # FIX: Cast to string immediately to avoid UUID comparison errors
+                            m = np.array(m_list, dtype=object)
+                            # Ensure SID column (index 0 in m) is strings
+                            m[:, 0] = m[:, 0].astype(str)
+                            
+                            h_col = np.full((m.shape[0], 1), hsh, dtype=object)
                             hit_blocks.append(np.hstack((h_col, m)))
                     else:
                         cache_misses.append(hsh)
             else:
-                for hsh in current_batch:
-                    cache_misses.append(hsh)
+                cache_misses = current_batch
 
             # Handle Cache Misses with MySQL
             sql_block = np.empty((0, 3), dtype=object)
@@ -283,53 +286,57 @@ class Query(BaseDatabase, metaclass=abc.ABCMeta):
                     sql_results = cur.fetchall()
                     
                     if sql_results:
+                        # sql_results is [(hash, sid, offset), ...]
                         sql_block = np.array(sql_results, dtype=object)
+                        # FIX: Convert UUID/Binary SID to string immediately
+                        sql_block[:, 1] = sql_block[:, 1].astype(str)
                         
-                        # POPULATE REDIS (Vectorized Grouping)
-                        # Sort by hash to use np.split
-                        sort_idx = np.argsort(sql_block[:, 0])
+                        # POPULATE REDIS
+                        sort_idx = np.argsort(sql_block[:, 0].astype(np.uint64))
                         sorted_arr = sql_block[sort_idx]
-                        unq_h, indices = np.unique(sorted_arr[:, 0], return_index=True)
+                        unq_h, indices = np.unique(sorted_arr[:, 0].astype(np.uint64), return_index=True)
                         groups = np.split(sorted_arr, indices[1:])
+                        
                         if self.redis_client:
                             write_pipe = self.redis_client.pipeline()
                             for h_key, group in zip(unq_h, groups):
-                                # Cache [sid, offset] only. Expiration: 24h
-                                redis_key = f"{self.prefix}:{h_key.upper()}"
+                                redis_key = f"{self.prefix}:{h_key}"
+                                # Cache [sid_str, offset]
                                 write_pipe.setex(redis_key, 86400, pickle.dumps(group[:, [1, 2]].tolist()))
                             write_pipe.execute()
 
             # 4. Merge Cache & DB results
             all_blocks = [sql_block] + hit_blocks if hit_blocks else [sql_block]
-            combined = np.vstack(all_blocks) if any(b.size > 0 for b in all_blocks) else np.empty((0, 3))
+            valid_blocks = [b for b in all_blocks if b.size > 0]
+            combined = np.vstack(valid_blocks) if valid_blocks else np.empty((0, 3))
 
             if combined.size == 0:
                 continue
 
-            db_hashes = combined[:, 0]
-            db_sids = combined[:, 1]
+            # --- THE FIX: Uniform Type Casting ---
+            db_hashes = combined[:, 0].astype(np.uint64)
+            db_sids = combined[:, 1].astype(str) # Strings are safe for np.unique
             db_offsets = combined[:, 2].astype(np.int64)
 
             # 5. Vectorized Dedup Counting
             u_sids, counts = np.unique(db_sids, return_counts=True)
             for sid, count in zip(u_sids, counts):
-                dedup_hashes[sid] = dedup_hashes.get(sid, 0) + count
+                dedup_hashes[sid] = dedup_hashes.get(sid, 0) + int(count)
 
-            # 6. NumPy Broadcasting for differences
+            # 6. NumPy Broadcasting
             unique_hashes_in_batch = np.unique(db_hashes)
             for hsh in unique_hashes_in_batch:
                 match_indices = np.where(db_hashes == hsh)[0]
                 db_offsets_for_hsh = db_offsets[match_indices]
                 db_sids_for_hsh = db_sids[match_indices]
-                sampled_offsets = mapper[hsh]
+                sampled_offsets = mapper.get(int(hsh))
 
-                # Matrix subtraction: (N, 1) - (1, M) -> (N, M)
-                diff_matrix = db_offsets_for_hsh[:, None] - sampled_offsets[None, :]
-                # Repeat SIDs to match the flattened diff_matrix size
-                sid_matrix = np.repeat(db_sids_for_hsh, sampled_offsets.shape[0])
-                
-                all_sids_flat.extend(sid_matrix)
-                all_offsets_diff_flat.extend(diff_matrix.flatten())
+                if sampled_offsets is not None:
+                    diff_matrix = db_offsets_for_hsh[:, None] - sampled_offsets[None, :]
+                    sid_matrix = np.repeat(db_sids_for_hsh, sampled_offsets.shape[0])
+                    
+                    all_sids_flat.extend(sid_matrix)
+                    all_offsets_diff_flat.extend(diff_matrix.flatten().tolist())
 
         results = list(zip(all_sids_flat, all_offsets_diff_flat)) if all_sids_flat else []
         return results, dedup_hashes
@@ -354,40 +361,40 @@ class MySQLDatabase(Query):
     # CREATES
     CREATE_SONGS_TABLE = f"""
         CREATE TABLE IF NOT EXISTS `{SONGS_TABLENAME}` (
-            `{FIELD_SONG_ID}` VARCHAR(36) NOT NULL DEFAULT (UUID())
-        ,   `{FIELD_SONGNAME}` VARCHAR(250) NOT NULL
-        ,   `{FIELD_FINGERPRINTED}` TINYINT DEFAULT 0
-        ,   `{FIELD_BLOB_SHA1}` BINARY(20) NOT NULL
-        ,   `{FIELD_TOTAL_HASHES}` INT NOT NULL DEFAULT 0
-        ,   `date_created` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ,   `date_modified` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ,   CONSTRAINT `pk_{SONGS_TABLENAME}_{FIELD_SONG_ID}` PRIMARY KEY (`{FIELD_SONG_ID}`)
-        ,   CONSTRAINT `uq_{SONGS_TABLENAME}_{FIELD_SONG_ID}` UNIQUE KEY (`{FIELD_SONG_ID}`)
+            `{FIELD_SONG_ID}` VARCHAR(36) NOT NULL DEFAULT (UUID()),
+            `{FIELD_SONGNAME}` VARCHAR(250) NOT NULL,
+            `{FIELD_FINGERPRINTED}` TINYINT UNSIGNED DEFAULT 0,
+            `{FIELD_BLOB_SHA1}` BINARY(20) NOT NULL,
+            `{FIELD_TOTAL_HASHES}` INT UNSIGNED NOT NULL DEFAULT 0,
+            `date_created` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            `date_modified` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+            PRIMARY KEY (`{FIELD_SONG_ID}`),
+            INDEX `idx_sha1` (`{FIELD_BLOB_SHA1}`)
         ) ENGINE=INNODB;
-    """
-
+        """
+    
     CREATE_FINGERPRINTS_TABLE = f"""
         CREATE TABLE IF NOT EXISTS `{FINGERPRINTS_TABLENAME}` (
-            `{FIELD_HASH}` BINARY(10) NOT NULL
-        ,   `{FIELD_SONG_ID}` VARCHAR(36) NOT NULL
-        ,   `{FIELD_OFFSET}` INT UNSIGNED NOT NULL
-        ,   `date_created` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ,   `date_modified` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ,   INDEX `ix_{FINGERPRINTS_TABLENAME}_{FIELD_HASH}` (`{FIELD_HASH}`)
-        ,   CONSTRAINT `uq_{FINGERPRINTS_TABLENAME}_{FIELD_SONG_ID}_{FIELD_OFFSET}_{FIELD_HASH}`
-                PRIMARY KEY (`{FIELD_HASH}`, `{FIELD_SONG_ID}`, `{FIELD_OFFSET}`)
-        ,   CONSTRAINT `fk_{FINGERPRINTS_TABLENAME}_{FIELD_SONG_ID}` FOREIGN KEY (`{FIELD_SONG_ID}`)
-                REFERENCES `{SONGS_TABLENAME}`(`{FIELD_SONG_ID}`) ON DELETE CASCADE
-    ) ENGINE=INNODB;
-    """
+            `{FIELD_HASH}` BIGINT UNSIGNED NOT NULL,
+            `{FIELD_SONG_ID}` VARCHAR(36) NOT NULL,
+            `{FIELD_OFFSET}` INT UNSIGNED NOT NULL,
+            `date_created` DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            -- Indexing strategy for fast lookups by Hash
+            INDEX `idx_hash` (`{FIELD_HASH}`),
+            -- Composite index to speed up song deletions/lookups
+            INDEX `idx_song_hash` (`{FIELD_SONG_ID}`, `{FIELD_HASH}`),
+            CONSTRAINT `fk_song` FOREIGN KEY (`{FIELD_SONG_ID}`) 
+                REFERENCES `{SONGS_TABLENAME}` (`{FIELD_SONG_ID}`) ON DELETE CASCADE
+        ) ENGINE=InnoDB;
+        """
 
     # INSERTS (IGNORES DUPLICATES)
     INSERT_FINGERPRINT = f"""
         INSERT IGNORE INTO `{FINGERPRINTS_TABLENAME}` (
-                `{FIELD_SONG_ID}`
-            ,   `{FIELD_HASH}`
+                `{FIELD_HASH}`
+            ,   `{FIELD_SONG_ID}`
             ,   `{FIELD_OFFSET}`)
-        VALUES (%s, UNHEX(%s), %s);
+        VALUES (%s, %s, %s);
     """
 
     INSERT_SONG = f"""
@@ -399,7 +406,7 @@ class MySQLDatabase(Query):
     SELECT = f"""
         SELECT `{FIELD_SONG_ID}`, `{FIELD_OFFSET}`
         FROM `{FINGERPRINTS_TABLENAME}`
-        WHERE `{FIELD_HASH}` = UNHEX(%s);
+        WHERE `{FIELD_HASH}` = %s;
     """
 
     SELECT_MULTIPLE = f"""
