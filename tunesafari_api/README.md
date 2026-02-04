@@ -4,13 +4,13 @@ You can use Docker to easily deploy the TuneSafari API server.
 
 Simply pull the docker image:
 ```
-docker pull bboymega/TuneSafari_api:v1.0.0
+docker pull bboymega/TuneSafari_api:1.0
 ```
 Prepare your `config.json`. Create your configuration file based on the example provided at the end of this readme.
 
 Spin up a container with the following command:
 ```
-docker run -d -p 8000:80 -v /path/to/your/config.json:/app/config.json bboymega/TuneSafari_api:v1.0.0
+docker run -d -p 8000:80 -v /path/to/your/config.json:/app/config.json bboymega/TuneSafari_api:1.0
 ```
 
 **FOR PRODUCTION**: Set up a reverse proxy using Apache2 or Nginx to expose the endpoints securely through HTTPS.
@@ -210,6 +210,7 @@ Configuring the distributed set of result storage database instances. Each insta
     "max_file_size_mb": 150
   },
   "redis": {
+    "_comment": "Remove 'user' and 'password' fields if redis server doen't require authentication. In this case protected-mode must also be disabled on the server.",
     "host": "172.17.0.1",
     "user": "dejavu",
     "password": "dejavu",
