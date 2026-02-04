@@ -4,12 +4,12 @@ WORKDIR /app
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-COPY /app/package*.json ./
+COPY package*.json ./
 
 RUN npm install
 
-COPY app /app/
+COPY . /app/
 
 EXPOSE 3000
 
-CMD npm run build && npm start
+CMD ["sh", "-c", "npm run build && npm start"]
