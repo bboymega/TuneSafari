@@ -1,6 +1,6 @@
 {
     "maxDuration": 10,
-    "apiBaseUrl": "http://api.example.com/",
+    "apiBaseUrl": "https://api.example.com/",
     "appName": "TuneSafari",
     "appLabel": "Find the Tracks That Sticks",
     "title": "Find the tracks that sticks",
