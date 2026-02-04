@@ -410,7 +410,7 @@ class MySQLDatabase(Query):
     """
 
     SELECT_MULTIPLE = f"""
-        SELECT HEX(`{FIELD_HASH}`), `{FIELD_SONG_ID}`, `{FIELD_OFFSET}`
+        SELECT `{FIELD_HASH}`, `{FIELD_SONG_ID}`, `{FIELD_OFFSET}`
         FROM `{FINGERPRINTS_TABLENAME}`
         WHERE `{FIELD_HASH}` IN (%s);
     """
@@ -461,7 +461,7 @@ class MySQLDatabase(Query):
     """
 
     # IN
-    IN_MATCH = f"UNHEX(%s)"
+    IN_MATCH = f"%s"
 
     def __init__(self, **options):
         redis_db_index = options.pop("redis_db_index", random.randint(0, 15))
