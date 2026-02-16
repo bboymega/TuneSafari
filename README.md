@@ -43,7 +43,7 @@ The web application serving as the user interface (UI) for the project. Built wi
 
 ### [TuneSafari_uploader](https://bboymega.github.io/TuneSafari/)
 
-The TuneSafari Uploader is a lightweight Web UI for uploading audio files to the TuneSafari backend for audio fingerprint sampling.
+The TuneSafari Uploader is a lightweight web interface for uploading audio files to the TuneSafari backend to generate audio fingerprints for future recognition. It interacts directly with the `/api/fingerprint` API endpoint.
 
 You can deploy the uploader on your own server, or use the hosted version available [here](https://bboymega.github.io/TuneSafari/).
 
