@@ -41,8 +41,10 @@ The backend API for handling music recognition, result storage and audio fingerp
 
 The web application serving as the user interface (UI) for the project. Built with Next.js/React.
 
-### TuneSafari_uploader
+### [TuneSafari_uploader](https://bboymega.github.io/TuneSafari/)
 
-The uploader module for handling the upload of audio data. Uploaded data is processed by the backend API with audio fingerprints stored in the database. This module can be run locally and is built with HTML/JavaScript.
+The TuneSafari Uploader is a lightweight Web UI for uploading audio files to the TuneSafari backend for audio fingerprint sampling.
 
-Documentation Status: In progress.
+You can deploy the uploader on your own server, or use the hosted version available [here](https://bboymega.github.io/TuneSafari/).
+
+All credentials are stored locally in your browser. No credentials are stored on the hosted server.
