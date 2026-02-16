@@ -1,3 +1,6 @@
+## TuneSafari
+![TuneSafari](screenshot.png)
+
 ## About
 TuneSafari is a scalable music fingerprinting and recognition system featuring multi-processing, multi-instance support, memory caching, media trimming and API integration.
 
