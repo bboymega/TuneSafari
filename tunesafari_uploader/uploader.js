@@ -123,6 +123,7 @@ function connectionSettings() {
     .then(response => response.text())
     .then(html => {
         connectionSettings.innerHTML = html;
+        connectionSettings.appendChild(closeButton);
         setTimeout(() => {
             loadCredential();
         }, 10);
@@ -144,7 +145,6 @@ function connectionSettings() {
         connectionSettings.remove();
     };
 
-    connectionSettings.appendChild(closeButton);
     document.getElementById('mainDiv').appendChild(connectionSettings);
         
 }
