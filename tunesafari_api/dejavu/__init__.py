@@ -163,12 +163,12 @@ class Dejavu:
         channel_amount = len(channels)
         for channeln, channel in enumerate(channels, start=1):
             if print_output:
-                print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {remote_addr} \"INFO: Fingerprinting channel {channeln}/{channel_amount} for {song_name}, blob_sha1: {file_hash.lower()}\"")
+                print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {remote_addr} \"INFO: Fingerprinting channel {channeln}/{channel_amount} for {song_name}, blob_sha1: {file_hash.lower()}\"", flush=True)
 
             hashes = fingerprint(channel, Fs=fs)
 
             if print_output:
-                print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {remote_addr} \"INFO: Finished channel {channeln}/{channel_amount} for {song_name}, blob_sha1: {file_hash.lower()}\"")
+                print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {remote_addr} \"INFO: Finished channel {channeln}/{channel_amount} for {song_name}, blob_sha1: {file_hash.lower()}\"", flush=True)
 
             fingerprints |= set(hashes)
 

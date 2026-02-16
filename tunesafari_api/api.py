@@ -82,7 +82,7 @@ except Exception as e:
 
 def init():
     try:
-        print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} TuneSafari \"INFO: Initializing TuneSafari\"")
+        print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} TuneSafari \"INFO: Initializing TuneSafari\"", flush=True)
         init_all_storage_db()
         with open(config_file) as f:
             config = json.load(f)
@@ -94,7 +94,7 @@ def init():
                         instances.append(djv_item)
                 except Exception as e:
                     sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
-        print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} TuneSafari \"INFO: worker is ready to accept requests\"")
+        print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} TuneSafari \"INFO: worker is ready to accept requests\"", flush=True)
     except Exception as e:
         sys.stderr.write("\033[31m" + str(e) + "\033[0m\n")
 
@@ -120,7 +120,7 @@ def sanitize_filename(filename):
 @limiter.limit(active_recognize_limit)
 def recognize_api():
     try:
-        print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {request.remote_addr} \"INFO: Incoming request from client for recognition process\"")
+        print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {request.remote_addr} \"INFO: Incoming request from client for recognition process\"", flush=True)
 
         if 'file' not in request.files:
             sys.stderr.write("\033[31m" + f"{datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')} {request.remote_addr} \"ERROR: No file part in the request\"" + "\033[0m\n")
@@ -266,7 +266,7 @@ def recognize_api():
             
         result_status = store_result(results_token, results_array)
         if result_status == 0:
-            print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {request.remote_addr} \"INFO: Recognition result generated, token: {results_token}\"")
+            print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {request.remote_addr} \"INFO: Recognition result generated, token: {results_token}\"", flush=True)
             return(jsonify({"token":results_token, "results": results_array, "status": "success"}))
         elif result_status == 1:
             sys.stderr.write("\033[93m" + f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {request.remote_addr} \"WARNING: No results were found\"" + "\033[0m\n")
@@ -294,7 +294,7 @@ def fetch_result_api(token):
     try:
         json_result = search_result_all(token)
         if json_result:
-            print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {request.remote_addr} \"INFO: Successfully fetched result, token: {token}\"")
+            print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {request.remote_addr} \"INFO: Successfully fetched result, token: {token}\"", flush=True)
             return jsonify(json_result)
         else:
             sys.stderr.write("\033[33m" + f"{datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')} {request.remote_addr} \"WARNING: The requested data could not be found, token: {token}\"" + "\033[0m\n")
@@ -317,14 +317,14 @@ def fetch_result_api(token):
 def fingerprint_api():
     try:
         if 'file' not in request.files:
-            print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {request.remote_addr} \"INFO: Incoming request from client for fingerprinting process, filename: {None}\"")
+            print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {request.remote_addr} \"INFO: Incoming request from client for fingerprinting process, filename: {None}\"", flush=True)
             sys.stderr.write("\033[31m" + f"{datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')} {request.remote_addr} \"ERROR: No file part in the request\"" + "\033[0m\n")
             return jsonify({
                 "status": "error",
                 "message": "No file part in the request"
             }), 400
         uploaded_filename = Path(request.files["file"].filename).name
-        print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {request.remote_addr} \"INFO: Incoming request from client for fingerprinting process, filename: {uploaded_filename}\"")
+        print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {request.remote_addr} \"INFO: Incoming request from client for fingerprinting process, filename: {uploaded_filename}\"", flush=True)
 
         with open(config_file, 'r') as jsonFile:
             config_json = json.load(jsonFile)
@@ -399,7 +399,7 @@ def fingerprint_api():
                     "message": "Empty song name"
                 }), 405
             elif status == 0:
-                print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {request.remote_addr} \"INFO: Fingerprinting successfully completed, filename: {uploaded_filename}\"")
+                print(f"{datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")} {request.remote_addr} \"INFO: Fingerprinting successfully completed, filename: {uploaded_filename}\"", flush=True)
                 return jsonify({
                     "status": "success",
                     "blob_sha1": file_hash.lower()
