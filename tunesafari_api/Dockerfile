@@ -21,4 +21,4 @@ EXPOSE 8000
 ENV FLASK_APP=api.py
 ENV FLASK_RUN_HOST=0.0.0.0
 
-CMD ["sh", "-c", "WORKERS=$(( $(nproc) * 2 + 1 )) && echo Starting Gunicorn with $WORKERS workers && exec gunicorn --bind 0.0.0.0:8000 --workers $WORKERS api:app --timeout 600"]
+CMD ["sh", "-c", "WORKERS=$(( $(nproc) * 2 + 1 )) && echo Starting Gunicorn with $WORKERS workers && exec gunicorn --bind 0.0.0.0:8000 --workers $WORKERS --threads 25 --worker-class gthread api:app --timeout 600"]
