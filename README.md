@@ -1,4 +1,4 @@
-## TuneSafari
+# TuneSafari
 ![TuneSafari](screenshot.png)
 
 ## About
