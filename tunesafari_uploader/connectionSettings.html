@@ -1,0 +1,74 @@
+<div style="display: flex; justify-content: center; width: 100%;">
+    <h2 class="mt-1" style="font-size: 1.2rem; user-select: none;">
+        Connection Settings
+    </h2>
+</div>
+<div class="input-group mt-3 mb-3">
+    <span class="input-group-text" id="protocol-addon" style="background-color: #212529; color: #f8f9fa; border-color: black; width: 140px;">
+        Protocol
+    </span>
+    <select 
+        id="protocol" 
+        name="protocol" 
+        class="form-select" 
+        aria-describedby="protocol-addon"
+        style="background-color: #f8f9fa; color: #212529; border-color: black;"
+    >
+        <option value="http">HTTP</option>
+        <option value="https" selected>HTTPS</option>
+    </select>
+</div>
+<div class="input-group mt-3 mb-3">
+    <span class="input-group-text" id="server-addon" style="background-color: #212529; color: #f8f9fa; border-color: black; width: 140px;">
+        Server
+    </span>
+    <input 
+        type="text"
+        id="server" 
+        name="server" 
+        class="form-control" 
+        placeholder="localhost"
+        aria-describedby="server-addon"
+        style="background-color: #f8f9fa; color: #212529; border-color: black; width: 300px;"
+    >
+</div>
+<div class="input-group mt-3 mb-3">
+    <span class="input-group-text" id="port-addon" style="background-color: #212529; color: #f8f9fa; border-color: black; width: 140px;">
+        Port
+    </span>
+    <input 
+        type="number"
+        id="port" 
+        name="port" 
+        class="form-control" 
+        placeholder="443"
+        value="443"
+        aria-describedby="port-addon"
+        style="background-color: #f8f9fa; color: #212529; border-color: black; width: 300px;"
+    >
+</div>
+<div class="input-group mt-3 mb-3">
+    <span class="input-group-text" id="token-addon" style="background-color: #212529; color: #f8f9fa; border-color: black; width: 140px;">
+        Token
+    </span>
+    <input 
+        type="password" 
+        id="token" 
+        name="token" 
+        class="form-control" 
+        placeholder=""
+        aria-describedby="token-addon"
+        style="background-color: #f8f9fa; color: #212529; border-color: black; width: 300px;"
+    >
+</div>
+<div id="alertPlaceholderSettings"  style="z-index: 99999; font-family: 'Segoe UI', sans-serif;"></div>
+<div class="mt-4">
+    <button class="btn btn-outline-primary btn-lg" onclick="saveCredential()" style="background-color: #f8f9fa; color: #000000ff; padding: 15px 30px">
+        Save <i class="fa-solid fa-floppy-disk"></i>
+    </button>
+</div>
+<div class="mt-3">
+    <footer class="small text-muted" style="font-family: 'Segoe UI', sans-serif;">
+        Settings are stored locally in your browser.
+    </footer>
+</div>

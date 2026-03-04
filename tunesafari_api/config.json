@@ -1,0 +1,92 @@
+{
+  "fingerprinting": {
+    "allow": true,
+    "token": "12345"
+  },
+  "recognizing": {
+    "max_duration": 10,
+    "max_file_size_mb": 150
+  },
+  "redis": {
+    "_comment": "Remove 'user' and 'password' fields if redis server doen't require authentication. In this case protected-mode must also be disabled on the server.",
+    "host": "172.17.0.1",
+    "user": "dejavu",
+    "password": "dejavu",
+    "prefix": "dejavu",
+    "port": 6379
+  },
+  "rate_limit": {
+    "fetching_results": "50 per second",
+    "recognizing": "10 per second",
+    "fingerprinting": "10 per second",
+    "redis_db_index": 0
+  },
+  "allowed_origin": ["https://example.com", "*"],
+  "instances": [
+    {
+      "database": {
+        "host": "172.17.0.1",
+        "user": "dejavu",
+        "password": "dejavu",
+        "database": "dejavu0",
+        "port": 9000
+      },
+      "redis_db_index": 1,
+      "database_type": "clickhouse"
+    },
+    {
+      "database": {
+        "host": "172.17.0.1",
+        "user": "dejavu",
+        "password": "dejavu",
+        "database": "dejavu1",
+        "port": 9000
+      },
+      "redis_db_index": 2,
+      "database_type": "clickhouse"
+    },
+    {
+      "database": {
+        "host": "172.17.0.1",
+        "user": "dejavu",
+        "password": "dejavu",
+        "database": "dejavu2",
+        "port": 9000
+      },
+      "redis_db_index": 3,
+      "database_type": "clickhouse"
+    }
+  ],
+  "results": [
+    {
+      "database": {
+        "host": "172.17.0.1",
+        "user": "dejavu",
+        "password": "dejavu",
+        "database": "result0",
+        "port": 9000
+      },
+      "database_type": "clickhouse"
+    },
+    {
+      "database": {
+        "host": "172.17.0.1",
+        "user": "dejavu",
+        "password": "dejavu",
+        "database": "result1",
+        "port": 9000
+      },
+      "database_type": "clickhouse"
+    },
+    {
+      "database": {
+        "host": "172.17.0.1",
+        "user": "dejavu",
+        "password": "dejavu",
+        "database": "result2",
+        "port": 9000
+      },
+      "database_type": "clickhouse"
+    }
+  ]
+}
